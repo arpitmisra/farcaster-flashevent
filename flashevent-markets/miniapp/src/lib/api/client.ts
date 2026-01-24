@@ -1,8 +1,10 @@
 import axios, { AxiosInstance } from 'axios';
-import { io, Socket } from 'socket.io-client';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3001';
+
+// Check if WebSocket is available (not in serverless mode)
+const WS_ENABLED = WS_URL && !WS_URL.includes('vercel.app');
 
 // Axios instance for REST API
 export const apiClient: AxiosInstance = axios.create({
@@ -33,36 +35,64 @@ apiClient.interceptors.response.use(
   }
 );
 
-// Socket.io client for real-time updates
-let socket: Socket | null = null;
+// Socket.io client for real-time updates (disabled in serverless mode)
+// In serverless mode, we use polling instead of WebSockets
+let socket: any = null;
 
-export function getSocket(): Socket {
+export function getSocket(): any {
+  // In production on Vercel, WebSockets are not supported
+  // Return a mock socket that does nothing
+  if (!WS_ENABLED || typeof window === 'undefined') {
+    return {
+      on: () => {},
+      off: () => {},
+      emit: () => {},
+      connect: () => {},
+      disconnect: () => {},
+      connected: false,
+    };
+  }
+  
+  // Only load socket.io-client if WebSocket is enabled
   if (!socket) {
-    socket = io(WS_URL, {
-      transports: ['websocket', 'polling'],
-      autoConnect: true,
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-    });
+    try {
+      const { io } = require('socket.io-client');
+      socket = io(WS_URL, {
+        transports: ['websocket', 'polling'],
+        autoConnect: true,
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000,
+      });
 
-    socket.on('connect', () => {
-      console.log('Socket connected:', socket?.id);
-    });
+      socket.on('connect', () => {
+        console.log('Socket connected:', socket?.id);
+      });
 
-    socket.on('disconnect', (reason) => {
-      console.log('Socket disconnected:', reason);
-    });
+      socket.on('disconnect', (reason: string) => {
+        console.log('Socket disconnected:', reason);
+      });
 
-    socket.on('connect_error', (error) => {
-      console.error('Socket connection error:', error);
-    });
+      socket.on('connect_error', (error: Error) => {
+        console.error('Socket connection error:', error);
+      });
+    } catch (err) {
+      console.warn('WebSocket not available, using polling mode');
+      return {
+        on: () => {},
+        off: () => {},
+        emit: () => {},
+        connect: () => {},
+        disconnect: () => {},
+        connected: false,
+      };
+    }
   }
   return socket;
 }
 
 export function disconnectSocket() {
-  if (socket) {
+  if (socket && typeof socket.disconnect === 'function') {
     socket.disconnect();
     socket = null;
   }

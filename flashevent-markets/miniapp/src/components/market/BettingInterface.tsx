@@ -1,15 +1,18 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useAccount } from 'wagmi';
+import { useAccount, useConnect } from 'wagmi';
 import { parseEther, formatEther } from 'viem';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { OddsBar } from './OddsBar';
 import { usePlaceBet, useUserPosition } from '@/lib/contracts/hooks';
+import { useChainSwitch } from '@/lib/hooks/useChainSwitch';
+import { useFarcaster } from '@/app/providers';
 import { formatEth, calculatePotentialWinnings, cn } from '@/lib/utils';
 import { FEES } from '@/lib/contracts/addresses';
+import { AlertCircle, Wallet } from 'lucide-react';
 
 interface BettingInterfaceProps {
   marketAddress: `0x${string}`;
@@ -30,13 +33,44 @@ export function BettingInterface({
   isBettingOpen,
   onSuccess,
 }: BettingInterfaceProps) {
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, isConnecting } = useAccount();
+  const { connect, connectors } = useConnect();
   const [selectedSide, setSelectedSide] = useState<'YES' | 'NO' | null>(null);
   const [betAmount, setBetAmount] = useState('0.1');
   const [showConfirm, setShowConfirm] = useState(false);
+  const [transactionError, setTransactionError] = useState<string | null>(null);
   
   const { placeBet, isPending, isConfirming, isSuccess, error, reset } = usePlaceBet(marketAddress);
   const { data: userPosition } = useUserPosition(marketAddress, address);
+  const { isCorrectChain, switchToMonad, isSwitching } = useChainSwitch();
+  const { isInMiniApp, isWalletReady } = useFarcaster();
+
+  // Handle wallet connection for Farcaster
+  const handleConnect = async () => {
+    if (isInMiniApp) {
+      // In Farcaster, use the first connector (miniAppConnector)
+      const farcasterConnector = connectors.find(c => c.id === 'farcaster' || c.name?.toLowerCase().includes('farcaster')) || connectors[0];
+      if (farcasterConnector) {
+        try {
+          await connect({ connector: farcasterConnector });
+        } catch (err) {
+          console.error('Failed to connect Farcaster wallet:', err);
+          setTransactionError('Failed to connect wallet. Please try again.');
+        }
+      }
+    } else {
+      // In browser, use injected connector
+      const injectedConnector = connectors.find(c => c.id === 'injected');
+      if (injectedConnector) {
+        try {
+          await connect({ connector: injectedConnector });
+        } catch (err) {
+          console.error('Failed to connect wallet:', err);
+          setTransactionError('Failed to connect wallet. Please try again.');
+        }
+      }
+    }
+  };
 
   // Calculate odds
   const totalPool = yesPool + noPool;
@@ -73,11 +107,43 @@ export function BettingInterface({
 
   const handlePlaceBet = async () => {
     if (!selectedSide || !betAmount) return;
+    setTransactionError(null);
+    
+    // Check if connected
+    if (!isConnected) {
+      setTransactionError('Please connect your wallet first');
+      return;
+    }
+
+    // Check if on correct chain
+    if (!isCorrectChain) {
+      try {
+        await switchToMonad();
+        // Wait a bit for chain switch to complete
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } catch (err) {
+        setTransactionError('Please switch to Monad Testnet to place bets');
+        return;
+      }
+    }
     
     try {
       await placeBet(selectedSide, parseEther(betAmount));
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to place bet:', err);
+      
+      // Parse common error messages
+      const errorMessage = err?.message || err?.toString() || 'Transaction failed';
+      
+      if (errorMessage.includes('user rejected') || errorMessage.includes('User rejected')) {
+        setTransactionError('Transaction was cancelled');
+      } else if (errorMessage.includes('insufficient funds')) {
+        setTransactionError('Insufficient balance for this bet');
+      } else if (errorMessage.includes('chain') || errorMessage.includes('network')) {
+        setTransactionError('Please switch to Monad Testnet');
+      } else {
+        setTransactionError(errorMessage.slice(0, 100));
+      }
     }
   };
 
@@ -236,9 +302,28 @@ export function BettingInterface({
             )}
 
             {/* Error Display */}
-            {error && (
-              <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
-                {error.message || 'Transaction failed'}
+            {(error || transactionError) && (
+              <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <span>{transactionError || error?.message || 'Transaction failed'}</span>
+              </div>
+            )}
+
+            {/* Chain Warning */}
+            {isConnected && !isCorrectChain && (
+              <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 text-sm">
+                <div className="flex items-center justify-between">
+                  <span>Switch to Monad Testnet to place bets</span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={switchToMonad}
+                    isLoading={isSwitching}
+                    className="text-xs ml-2"
+                  >
+                    Switch
+                  </Button>
+                </div>
               </div>
             )}
 
@@ -249,18 +334,26 @@ export function BettingInterface({
                 size="lg"
                 fullWidth
                 onClick={handlePlaceBet}
-                isLoading={isPending || isConfirming}
+                isLoading={isPending || isConfirming || isSwitching}
                 disabled={!betAmount || parseFloat(betAmount) <= 0}
               >
-                {isPending 
-                  ? 'Confirm in Wallet...' 
-                  : isConfirming 
-                    ? 'Confirming...' 
-                    : `Bet ${betAmount} ETH on ${selectedSide}`
+                {isSwitching
+                  ? 'Switching Network...'
+                  : isPending 
+                    ? 'Confirm in Wallet...' 
+                    : isConfirming 
+                      ? 'Confirming...' 
+                      : `Bet ${betAmount} ETH on ${selectedSide}`
                 }
               </Button>
             ) : (
-              <Button size="lg" fullWidth disabled>
+              <Button 
+                size="lg" 
+                fullWidth 
+                onClick={handleConnect}
+                isLoading={isConnecting}
+              >
+                <Wallet className="w-4 h-4 mr-2" />
                 Connect Wallet to Bet
               </Button>
             )}

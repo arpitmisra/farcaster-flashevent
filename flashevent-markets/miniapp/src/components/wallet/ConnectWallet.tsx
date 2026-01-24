@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/Button';
 import { formatAddress } from '@/lib/utils';
 import { useFarcaster } from '@/app/providers';
 import { useChainSwitch } from '@/lib/hooks/useChainSwitch';
+import { useWalletDetails, useCopyAddress } from '@/lib/hooks/useWalletDetails';
+import { Copy, Check, ExternalLink, RefreshCw } from 'lucide-react';
 
 export function ConnectWallet() {
   const [showOptions, setShowOptions] = useState(false);
@@ -52,30 +54,63 @@ export function ConnectWallet() {
     setShowOptions(false);
   };
 
+  // Get wallet details for balance display
+  const { balance, isLoading: isBalanceLoading, explorerUrl, refetch } = useWalletDetails();
+  const { copied, copy } = useCopyAddress();
+
+  const handleCopyAddress = () => {
+    if (address) {
+      copy(address);
+    }
+  };
+
   // If in Farcaster Mini App, use the built-in connector
   if (isInMiniApp) {
     if (isConnected && address) {
       return (
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-800 border border-gray-700">
-            {farcasterUser?.pfpUrl && (
-              <img 
-                src={farcasterUser.pfpUrl} 
-                alt="Profile" 
-                className="w-6 h-6 rounded-full"
-              />
-            )}
-            <span className="text-sm font-medium text-white">
-              {farcasterUser?.username ? `@${farcasterUser.username}` : formatAddress(address)}
-            </span>
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-800 border border-gray-700">
+              {farcasterUser?.pfpUrl && (
+                <img 
+                  src={farcasterUser.pfpUrl} 
+                  alt="Profile" 
+                  className="w-6 h-6 rounded-full"
+                />
+              )}
+              <div className="flex flex-col">
+                <span className="text-sm font-medium text-white">
+                  {farcasterUser?.username ? `@${farcasterUser.username}` : formatAddress(address)}
+                </span>
+                <span className="text-xs font-bold text-purple-400">
+                  {isBalanceLoading ? '...' : `${balance?.native.formatted || '0'} ${balance?.native.symbol || 'MON'}`}
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={handleCopyAddress}
+                className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
+                title="Copy address"
+              >
+                {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+              </button>
+              <button
+                onClick={() => window.open(explorerUrl, '_blank')}
+                className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
+                title="View on explorer"
+              >
+                <ExternalLink className="w-4 h-4" />
+              </button>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => disconnect()}
+            >
+              Disconnect
+            </Button>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => disconnect()}
-          >
-            Disconnect
-          </Button>
         </div>
       );
     }
@@ -104,9 +139,14 @@ export function ConnectWallet() {
             <div className="w-6 h-6 rounded-full bg-orange-500 flex items-center justify-center text-xs font-bold">
               🦊
             </div>
-            <span className="text-sm font-medium text-white">
-              {formatAddress(address)}
-            </span>
+            <div className="flex flex-col">
+              <span className="text-sm font-medium text-white">
+                {formatAddress(address)}
+              </span>
+              <span className="text-xs font-bold text-purple-400">
+                {isBalanceLoading ? '...' : `${balance?.native.formatted || '0'} ${balance?.native.symbol || 'MON'}`}
+              </span>
+            </div>
             {/* Chain indicator */}
             {isCorrectChain ? (
               <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded">
@@ -117,6 +157,29 @@ export function ConnectWallet() {
                 Wrong Chain
               </span>
             )}
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={handleCopyAddress}
+              className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
+              title="Copy address"
+            >
+              {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+            </button>
+            <button
+              onClick={() => window.open(explorerUrl, '_blank')}
+              className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
+              title="View on explorer"
+            >
+              <ExternalLink className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => refetch()}
+              className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
+              title="Refresh balance"
+            >
+              <RefreshCw className="w-4 h-4" />
+            </button>
           </div>
           <Button
             variant="ghost"
@@ -285,6 +348,8 @@ export function WalletButton() {
   const { wallets } = useWallets();
   const { user: farcasterUser, isInMiniApp } = useFarcaster();
   const { isCorrectChain, isSwitching, switchToMonad, isFarcasterConnector } = useChainSwitch();
+  const { balance, isLoading: isBalanceLoading, explorerUrl, transactionCount, refetch } = useWalletDetails();
+  const { copied, copy } = useCopyAddress();
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -318,6 +383,13 @@ export function WalletButton() {
     setShowOptions(false);
   };
 
+  // Handle copy address
+  const handleCopyAddress = () => {
+    if (address) {
+      copy(address);
+    }
+  };
+
   // Prioritize wagmi connection (needed for transactions)
   if (isConnected && address) {
     // Show switching indicator
@@ -344,20 +416,69 @@ export function WalletButton() {
           <span className="text-xs font-medium text-white">
             {formatAddress(address, 3)}
           </span>
+          <span className="text-xs font-bold text-purple-400">
+            {isBalanceLoading ? '...' : `${balance?.native.formatted || '0'}`}
+          </span>
           {!isCorrectChain && (
             <span className="text-xs text-red-400">⚠️</span>
           )}
         </button>
         
         {showOptions && (
-          <div className="absolute right-0 mt-2 w-56 rounded-xl bg-gray-900 border border-gray-700 shadow-xl z-50 overflow-hidden">
-            <div className="p-2">
-              {/* Chain Status */}
-              <div className="px-3 py-2 mb-2 rounded-lg bg-gray-800">
-                <p className="text-xs text-gray-400">Network</p>
-                <p className={`text-sm font-medium ${isCorrectChain ? 'text-green-400' : 'text-red-400'}`}>
-                  {isCorrectChain ? '✓ Monad Testnet' : '✗ Wrong Network'}
-                </p>
+          <div className="absolute right-0 mt-2 w-72 rounded-xl bg-gray-900 border border-gray-700 shadow-xl z-50 overflow-hidden">
+            <div className="p-3">
+              {/* Wallet Info */}
+              <div className="px-3 py-3 mb-2 rounded-lg bg-gradient-to-r from-purple-900/30 to-pink-900/30 border border-purple-500/20">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs text-gray-400">Address</p>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={handleCopyAddress}
+                      className="p-1 rounded hover:bg-gray-700 text-gray-400 hover:text-white"
+                      title="Copy"
+                    >
+                      {copied ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
+                    </button>
+                    <button
+                      onClick={() => window.open(explorerUrl, '_blank')}
+                      className="p-1 rounded hover:bg-gray-700 text-gray-400 hover:text-white"
+                      title="Explorer"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+                <p className="text-sm font-mono text-white mb-3">{formatAddress(address, 6)}</p>
+                
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-gray-400">Balance</p>
+                    <p className="text-lg font-bold text-white">
+                      {isBalanceLoading ? '...' : `${balance?.native.formatted || '0'} ${balance?.native.symbol || 'MON'}`}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => refetch()}
+                    className="p-2 rounded-lg hover:bg-gray-700 text-gray-400 hover:text-white"
+                    title="Refresh"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Stats */}
+              <div className="grid grid-cols-2 gap-2 mb-2">
+                <div className="px-3 py-2 rounded-lg bg-gray-800">
+                  <p className="text-xs text-gray-400">Transactions</p>
+                  <p className="text-sm font-medium text-white">{transactionCount ?? '-'}</p>
+                </div>
+                <div className="px-3 py-2 rounded-lg bg-gray-800">
+                  <p className="text-xs text-gray-400">Network</p>
+                  <p className={`text-sm font-medium ${isCorrectChain ? 'text-green-400' : 'text-red-400'}`}>
+                    {isCorrectChain ? 'Monad' : 'Wrong'}
+                  </p>
+                </div>
               </div>
               
               {/* Switch Chain Button */}
@@ -367,23 +488,23 @@ export function WalletButton() {
                     switchToMonad();
                     setShowOptions(false);
                   }}
-                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-800 text-left text-sm text-yellow-400 mb-1"
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 text-sm mb-2"
                 >
                   <span>🔄</span>
-                  <span>Switch to Monad</span>
+                  <span>Switch to Monad Testnet</span>
                 </button>
               )}
               
-              <div className="h-px bg-gray-700 my-1" />
+              <div className="h-px bg-gray-700 my-2" />
               
               <button
                 onClick={() => {
                   disconnect();
                   setShowOptions(false);
                 }}
-                className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-gray-800 rounded-lg"
+                className="w-full px-3 py-2 text-center text-sm text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
               >
-                Disconnect
+                Disconnect Wallet
               </button>
             </div>
           </div>

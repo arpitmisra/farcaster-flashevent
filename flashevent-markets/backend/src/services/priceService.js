@@ -23,33 +23,79 @@ const SUPPORTED_ASSETS = {
   optimism: { symbol: 'OP', name: 'Optimism' },
 };
 
-// Cache for prices - initialize with mock data
+// Cache for prices - will be populated on first fetch
 let priceCache = {};
 let lastFetchTime = 0;
 const CACHE_DURATION = 10000; // 10 seconds
+let isInitialized = false;
 
-// Initialize with mock prices on startup
-priceCache = getMockPrices();
+// Binance API as secondary fallback
+const BINANCE_API = 'https://api.binance.com/api/v3';
+
+// Symbol mappings for Binance
+const BINANCE_SYMBOLS = {
+  ETH: 'ETHUSDT',
+  BTC: 'BTCUSDT',
+  SOL: 'SOLUSDT',
+  LINK: 'LINKUSDT',
+  UNI: 'UNIUSDT',
+  AAVE: 'AAVEUSDT',
+  MATIC: 'MATICUSDT',
+  ARB: 'ARBUSDT',
+  OP: 'OPUSDT',
+};
 
 /**
- * Get mock prices for fallback
+ * Fetch prices from Binance as fallback
  */
-function getMockPrices() {
-  const now = Date.now();
-  // Add slight random variations for realism
-  const rand = () => (Math.random() - 0.5) * 2;
-  return {
-    ETH: { id: 'ethereum', symbol: 'ETH', name: 'Ethereum', price: 3500 + rand() * 50, change24h: 2.5 + rand(), volume24h: 15000000000, marketCap: 420000000000, lastUpdated: now },
-    BTC: { id: 'bitcoin', symbol: 'BTC', name: 'Bitcoin', price: 95000 + rand() * 500, change24h: 1.2 + rand(), volume24h: 35000000000, marketCap: 1900000000000, lastUpdated: now },
-    SOL: { id: 'solana', symbol: 'SOL', name: 'Solana', price: 180 + rand() * 5, change24h: -1.5 + rand(), volume24h: 3000000000, marketCap: 85000000000, lastUpdated: now },
-    USDC: { id: 'usd-coin', symbol: 'USDC', name: 'USD Coin', price: 1.00, change24h: 0.01, volume24h: 5000000000, marketCap: 45000000000, lastUpdated: now },
-    LINK: { id: 'chainlink', symbol: 'LINK', name: 'Chainlink', price: 22 + rand(), change24h: 3.1 + rand(), volume24h: 800000000, marketCap: 13000000000, lastUpdated: now },
-    UNI: { id: 'uniswap', symbol: 'UNI', name: 'Uniswap', price: 12 + rand() * 0.5, change24h: -0.8 + rand(), volume24h: 200000000, marketCap: 7000000000, lastUpdated: now },
-    AAVE: { id: 'aave', symbol: 'AAVE', name: 'Aave', price: 280 + rand() * 10, change24h: 4.2 + rand(), volume24h: 300000000, marketCap: 4200000000, lastUpdated: now },
-    MATIC: { id: 'matic-network', symbol: 'MATIC', name: 'Polygon', price: 0.85 + rand() * 0.05, change24h: -2.1 + rand(), volume24h: 400000000, marketCap: 8000000000, lastUpdated: now },
-    ARB: { id: 'arbitrum', symbol: 'ARB', name: 'Arbitrum', price: 1.80 + rand() * 0.1, change24h: 5.5 + rand(), volume24h: 600000000, marketCap: 2300000000, lastUpdated: now },
-    OP: { id: 'optimism', symbol: 'OP', name: 'Optimism', price: 3.20 + rand() * 0.2, change24h: 2.8 + rand(), volume24h: 400000000, marketCap: 3400000000, lastUpdated: now },
-  };
+async function fetchFromBinance() {
+  try {
+    const symbols = Object.values(BINANCE_SYMBOLS);
+    const response = await axios.get(`${BINANCE_API}/ticker/24hr`, {
+      params: { symbols: JSON.stringify(symbols) },
+      timeout: 10000,
+    });
+
+    const prices = {};
+    const now = Date.now();
+
+    for (const [symbol, binanceSymbol] of Object.entries(BINANCE_SYMBOLS)) {
+      const data = response.data.find(t => t.symbol === binanceSymbol);
+      if (data) {
+        const asset = Object.values(SUPPORTED_ASSETS).find(a => a.symbol === symbol);
+        const id = Object.entries(SUPPORTED_ASSETS).find(([, a]) => a.symbol === symbol)?.[0];
+        if (asset && id) {
+          prices[symbol] = {
+            id,
+            symbol,
+            name: asset.name,
+            price: parseFloat(data.lastPrice),
+            change24h: parseFloat(data.priceChangePercent),
+            volume24h: parseFloat(data.quoteVolume),
+            marketCap: 0, // Binance doesn't provide market cap
+            lastUpdated: now,
+          };
+        }
+      }
+    }
+
+    // USDC is always $1
+    prices.USDC = {
+      id: 'usd-coin',
+      symbol: 'USDC',
+      name: 'USD Coin',
+      price: 1.00,
+      change24h: 0,
+      volume24h: 0,
+      marketCap: 0,
+      lastUpdated: now,
+    };
+
+    return prices;
+  } catch (error) {
+    logger.error('Error fetching from Binance:', error.message);
+    return null;
+  }
 }
 
 /**
@@ -108,8 +154,18 @@ async function fetchPrices() {
       return priceCache;
     }
     
-    // Return mock data as fallback
-    return getMockPrices();
+    // Try Binance as fallback
+    logger.info('Attempting Binance fallback for prices...');
+    const binancePrices = await fetchFromBinance();
+    if (binancePrices && Object.keys(binancePrices).length > 0) {
+      priceCache = binancePrices;
+      lastFetchTime = Date.now();
+      return binancePrices;
+    }
+    
+    // Return empty object if all sources fail
+    logger.warn('All price sources failed - no price data available');
+    return {};
   }
 }
 

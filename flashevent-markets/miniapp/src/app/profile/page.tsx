@@ -2,21 +2,36 @@
 
 import { useState } from 'react';
 import { useAccount } from 'wagmi';
+import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { LevelProgress } from '@/components/gamification/LevelProgress';
 import { AchievementsGrid } from '@/components/gamification/AchievementBadge';
 import { ConnectWallet } from '@/components/wallet/ConnectWallet';
 import { MarketCard } from '@/components/market/MarketCard';
-import { MarketCardSkeleton } from '@/components/ui/LoadingSpinner';
+import { MarketCardSkeleton, LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { useMarketsByCreator, useMarketData, useUserPosition } from '@/lib/contracts/hooks';
 import { useFarcaster } from '@/app/providers';
 import { formatEth, formatAddress, cn } from '@/lib/utils';
 import { getLevelFromXP } from '@/types/index';
 import { MarketStatus, MarketResult, ACHIEVEMENTS } from '@/types';
+import { fetchUserStats } from '@/lib/api/client';
 import { Share2, ExternalLink, Settings, Trophy, Target, Coins, TrendingUp } from 'lucide-react';
 
 type Tab = 'positions' | 'created' | 'achievements';
+
+interface UserStatsResponse {
+  address: string;
+  fid?: number;
+  totalBets: number;
+  totalVolume: number;
+  marketsCreated: number;
+  resolvedBets?: number;
+  wins?: number;
+  winRate?: number;
+  totalPnL?: number;
+  joinedAt?: string;
+}
 
 export default function ProfilePage() {
   const { address, isConnected } = useAccount();
@@ -25,18 +40,33 @@ export default function ProfilePage() {
   
   const { data: createdMarkets, isLoading: isLoadingCreated } = useMarketsByCreator(address);
 
-  // Mock user stats (in a real app, fetch from backend)
+  // Fetch real user stats from backend
+  const { data: apiStats, isLoading: isLoadingStats } = useQuery<UserStatsResponse>({
+    queryKey: ['userStats', address],
+    queryFn: () => address ? fetchUserStats(address) as Promise<UserStatsResponse> : Promise.resolve({} as UserStatsResponse),
+    enabled: !!address,
+    staleTime: 30000,
+  });
+
+  // Combine API stats with on-chain data
   const userStats = {
-    xp: 350,
-    totalBets: 12,
-    totalWins: 8,
-    winRate: 66.7,
-    totalProfit: BigInt('1500000000000000000'), // 1.5 ETH
-    currentStreak: 3,
-    bestStreak: 5,
-    marketsCreated: createdMarkets?.length || 0,
-    creatorEarnings: BigInt('250000000000000000'), // 0.25 ETH
-    achievements: ['first_steps', 'first_bet', 'winner', 'hot_streak', 'market_creator'],
+    xp: ((apiStats?.totalBets || 0) * 25) + ((apiStats?.wins || 0) * 50), // Calculate XP from activity
+    totalBets: apiStats?.totalBets || 0,
+    totalWins: apiStats?.wins || 0,
+    winRate: apiStats?.winRate || 0,
+    totalProfit: BigInt(Math.floor((apiStats?.totalPnL || 0) * 1e18)), // Convert to wei
+    currentStreak: 0, // Would need to track separately
+    bestStreak: 0,
+    marketsCreated: apiStats?.marketsCreated || createdMarkets?.length || 0,
+    creatorEarnings: BigInt(0), // Would need to calculate from market data
+    totalVolume: apiStats?.totalVolume || 0,
+    // Calculate achievements based on stats
+    achievements: [
+      ...(apiStats?.totalBets ? ['first_steps', 'first_bet'] : []),
+      ...(apiStats?.wins ? ['winner'] : []),
+      ...((apiStats?.wins || 0) >= 3 ? ['hot_streak'] : []),
+      ...(apiStats?.marketsCreated ? ['market_creator'] : []),
+    ],
   };
 
   const levelInfo = getLevelFromXP(userStats.xp);
@@ -126,10 +156,10 @@ export default function ProfilePage() {
           </Card>
           <Card>
             <CardContent className="p-4 text-center">
-              <div className="text-2xl mb-1">🔥</div>
-              <div className="text-lg font-bold text-white">{userStats.currentStreak}</div>
-              <div className="text-xs text-gray-400">Current Streak</div>
-              <div className="text-xs text-gray-500 mt-1">Best: {userStats.bestStreak}</div>
+              <div className="text-2xl mb-1">📊</div>
+              <div className="text-lg font-bold text-white">{userStats.totalVolume.toFixed(4)}</div>
+              <div className="text-xs text-gray-400">Volume (ETH)</div>
+              <div className="text-xs text-gray-500 mt-1">{userStats.totalBets} bets</div>
             </CardContent>
           </Card>
           <Card>
@@ -154,8 +184,8 @@ export default function ProfilePage() {
                   <span className="ml-2 text-white font-medium">{userStats.marketsCreated}</span>
                 </div>
                 <div>
-                  <span className="text-gray-400">Creator Earnings:</span>
-                  <span className="ml-2 text-green-400 font-medium">+{formatEth(userStats.creatorEarnings)} ETH</span>
+                  <span className="text-gray-400">Total Volume:</span>
+                  <span className="ml-2 text-green-400 font-medium">{userStats.totalVolume.toFixed(4)} ETH</span>
                 </div>
               </div>
             </CardContent>
@@ -242,7 +272,7 @@ export default function ProfilePage() {
           variant="outline" 
           fullWidth
           onClick={() => shareToFarcaster(
-            `⚡ Check out my FlashEvent stats!\n\n🎯 Win Rate: ${userStats.winRate.toFixed(1)}%\n💰 Profit: +${formatEth(userStats.totalProfit)} ETH\n🔥 Streak: ${userStats.currentStreak} wins\n🏆 Level: ${levelInfo.level} ${levelInfo.name}\n\nCan you beat me?`,
+            `⚡ Check out my FlashEvent stats!\n\n🎯 Win Rate: ${userStats.winRate.toFixed(1)}%\n💰 Volume: ${userStats.totalVolume.toFixed(4)} ETH\n📊 Bets: ${userStats.totalBets}\n🏆 Level: ${levelInfo.level} ${levelInfo.name}\n\nCan you beat me?`,
             process.env.NEXT_PUBLIC_APP_URL
           )}
         >

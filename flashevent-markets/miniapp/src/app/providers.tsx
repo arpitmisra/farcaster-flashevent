@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode, useEffect, useState, createContext, useContext, useCallback } from 'react';
+import { ReactNode, useEffect, useState, createContext, useContext, useCallback, useMemo } from 'react';
 import sdk, { type Context } from '@farcaster/frame-sdk';
 import { PrivyProvider } from '@privy-io/react-auth';
 import { WagmiProvider, createConfig, http } from 'wagmi';
@@ -32,21 +32,52 @@ export const monadTestnet: Chain = {
   testnet: true,
 };
 
-// Wagmi Configuration with multiple connectors
-const wagmiConfig = createConfig({
+// Check if we're in a Farcaster Mini App environment (client-side only)
+const getIsMiniAppEnvironment = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  return window.location.search.includes('miniApp=true') || 
+         window.parent !== window ||
+         window.location.href.includes('warpcast');
+};
+
+// Create wagmi config based on environment
+// The Farcaster connector will be first in miniapp, injected first otherwise
+function createWagmiConfig(isMiniApp: boolean) {
+  const connectors = isMiniApp
+    ? [
+        // In Mini App: Farcaster connector first (primary)
+        miniAppConnector(),
+        // Fallback to injected
+        injected({ shimDisconnect: true }),
+      ]
+    : [
+        // In browser: Injected (MetaMask) first
+        injected({ shimDisconnect: true }),
+        // Farcaster as fallback
+        miniAppConnector(),
+      ];
+
+  return createConfig({
+    chains: [monadTestnet],
+    transports: {
+      [monadTestnet.id]: http(),
+    },
+    connectors,
+    ssr: true,
+  });
+}
+
+// Initial config - will be replaced with proper one once we know the environment
+let wagmiConfig = createConfig({
   chains: [monadTestnet],
   transports: {
     [monadTestnet.id]: http(),
   },
   connectors: [
-    // Farcaster Mini App connector (for Warpcast)
     miniAppConnector(),
-    // MetaMask and other browser extension wallets
-    injected({
-      shimDisconnect: true,
-    }),
+    injected({ shimDisconnect: true }),
   ],
-  ssr: true, // Enable SSR support for Next.js
+  ssr: true,
 });
 
 // React Query Client
@@ -75,6 +106,8 @@ interface FarcasterContextType {
   user: FarcasterUser | null;
   isSDKLoaded: boolean;
   isInMiniApp: boolean;
+  isWalletReady: boolean;
+  connectedAddress: string | null;
   openUrl: (url: string) => Promise<void>;
   shareToFarcaster: (text: string, embedUrl?: string) => Promise<void>;
   addMiniApp: () => Promise<void>;
@@ -85,6 +118,8 @@ const FarcasterContext = createContext<FarcasterContextType>({
   user: null,
   isSDKLoaded: false,
   isInMiniApp: false,
+  isWalletReady: false,
+  connectedAddress: null,
   openUrl: async () => {},
   shareToFarcaster: async () => {},
   addMiniApp: async () => {},
@@ -103,16 +138,18 @@ function FarcasterProvider({ children }: { children: ReactNode }) {
   const [context, setContext] = useState<Context | null>(null);
   const [user, setUser] = useState<FarcasterUser | null>(null);
   const [isInMiniApp, setIsInMiniApp] = useState(false);
+  const [isWalletReady, setIsWalletReady] = useState(false);
+  const [connectedAddress, setConnectedAddress] = useState<string | null>(null);
 
   useEffect(() => {
     const load = async () => {
       try {
         // Check if we're in a Farcaster Mini App environment
-        const isMiniAppEnv = typeof window !== 'undefined' && 
-          (window.location.search.includes('miniApp=true') || 
-           window.parent !== window);
+        const isMiniAppEnv = getIsMiniAppEnvironment();
 
         if (isMiniAppEnv) {
+          console.log('Detected Farcaster Mini App environment');
+          
           // Load Farcaster context (auto-authentication)
           const ctx = await sdk.context;
           setContext(ctx);
@@ -126,19 +163,45 @@ function FarcasterProvider({ children }: { children: ReactNode }) {
               displayName: ctx.user.displayName,
               pfpUrl: ctx.user.pfpUrl,
             });
+            console.log('Farcaster user loaded:', ctx.user.username);
+          }
+
+          // Try to get the ethereum provider and connected accounts
+          try {
+            const provider = await sdk.wallet.getEthereumProvider();
+            if (provider) {
+              console.log('Farcaster Ethereum provider obtained');
+              setIsWalletReady(true);
+              
+              // Try to get the connected account
+              try {
+                const accounts = await provider.request({ method: 'eth_accounts' }) as string[];
+                if (accounts && accounts.length > 0) {
+                  setConnectedAddress(accounts[0]);
+                  console.log('Farcaster wallet already connected:', accounts[0]);
+                }
+              } catch (accountErr) {
+                console.log('No accounts connected yet, will connect on demand');
+              }
+            }
+          } catch (providerErr) {
+            console.error('Failed to get Farcaster wallet provider:', providerErr);
+            // Still proceed - user may need to connect
           }
 
           // Signal ready to Farcaster client (hides splash screen)
           sdk.actions.ready();
-          console.log('Farcaster SDK loaded:', ctx);
+          console.log('Farcaster SDK ready, context:', ctx);
         } else {
-          console.log('Not in Farcaster Mini App environment, skipping SDK init');
+          console.log('Not in Farcaster Mini App environment, using browser wallet');
+          setIsWalletReady(true); // Browser wallets are always "ready"
         }
         
         setIsSDKLoaded(true);
       } catch (error) {
         console.error('Failed to load Farcaster SDK:', error);
         setIsSDKLoaded(true); // Still proceed for development
+        setIsWalletReady(true);
       }
     };
 
@@ -214,6 +277,8 @@ function FarcasterProvider({ children }: { children: ReactNode }) {
       user, 
       isSDKLoaded, 
       isInMiniApp,
+      isWalletReady,
+      connectedAddress,
       openUrl,
       shareToFarcaster,
       addMiniApp,
@@ -230,7 +295,7 @@ export function Providers({ children }: { children: ReactNode }) {
       <WagmiProvider config={wagmiConfig}>
         <QueryClientProvider client={queryClient}>
           <PrivyProvider
-            appId={process.env.NEXT_PUBLIC_PRIVY_APP_ID || 'placeholder-app-id'}
+            appId={process.env.NEXT_PUBLIC_PRIVY_APP_ID!}
             config={{
               loginMethods: ['wallet', 'email', 'google', 'twitter', 'farcaster'],
               appearance: {

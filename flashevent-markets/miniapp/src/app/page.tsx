@@ -9,10 +9,14 @@ import { MarketCard, FeaturedMarketCard } from '@/components/market/MarketCard';
 import { MarketCardSkeleton, PageLoader } from '@/components/ui/LoadingSpinner';
 import { LevelProgress } from '@/components/gamification/LevelProgress';
 import { WalletButton } from '@/components/wallet/ConnectWallet';
+import { useWalletDetails, useCopyAddress } from '@/lib/hooks/useWalletDetails';
 import { useAllMarkets, useMarketData } from '@/lib/contracts/hooks';
 import { useFarcaster } from './providers';
 import { formatEth, formatTimeRemaining, formatAddress } from '@/lib/utils';
+import { fetchLeaderboard } from '@/lib/api/client';
 import { MarketStatus, MarketResult } from '@/types';
+import { useQuery } from '@tanstack/react-query';
+import { Copy, Check, ExternalLink, Wallet } from 'lucide-react';
 import Link from 'next/link';
 
 export default function HomePage() {
@@ -24,6 +28,31 @@ export default function HomePage() {
 
   // Check if user is connected via either wagmi or Privy
   const isUserConnected = isConnected || authenticated;
+  
+  // Get wallet details
+  const { balance, isLoading: isBalanceLoading, explorerUrl, shortAddress } = useWalletDetails();
+  const { copied, copy } = useCopyAddress();
+
+  const handleCopyAddress = () => {
+    const addr = address || privyUser?.wallet?.address || '';
+    if (addr) {
+      copy(addr);
+    }
+  };
+
+  // Fetch top predictors from leaderboard
+  const { data: leaderboardData } = useQuery({
+    queryKey: ['leaderboard', 'profit', 'all'],
+    queryFn: () => fetchLeaderboard({ type: 'profit', period: 'all', limit: 3 }),
+    staleTime: 60000,
+  });
+
+  const topPredictors = (leaderboardData as Array<{
+    rank: number;
+    address: string;
+    user?: { username?: string };
+    totalVolume: number;
+  }> || []).slice(0, 3);
 
   // Show add to favorites prompt after first interaction
   useEffect(() => {
@@ -68,32 +97,47 @@ export default function HomePage() {
                   />
                 ) : (
                   <div className="w-12 h-12 rounded-full bg-purple-600 flex items-center justify-center text-xl">
-                    👤
+                    <Wallet className="w-6 h-6 text-white" />
                   </div>
                 )}
                 <div className="flex-1">
-                  <h2 className="font-medium text-white">
-                    {farcasterUser?.displayName || 
-                     privyUser?.farcaster?.displayName || 
-                     farcasterUser?.username || 
-                     privyUser?.farcaster?.username || 
-                     'Predictor'}
-                  </h2>
+                  <div className="flex items-center gap-2">
+                    <h2 className="font-medium text-white">
+                      {farcasterUser?.displayName || 
+                       privyUser?.farcaster?.displayName || 
+                       farcasterUser?.username || 
+                       privyUser?.farcaster?.username || 
+                       'Predictor'}
+                    </h2>
+                    {/* Balance Badge */}
+                    <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400 text-xs font-bold">
+                      {isBalanceLoading ? '...' : `${balance?.native.formatted || '0'} ${balance?.native.symbol || 'MON'}`}
+                    </span>
+                  </div>
                   {(address || privyUser?.wallet?.address) && (
-                    <button
-                      onClick={() => {
-                        const fullAddress = address || privyUser?.wallet?.address || '';
-                        navigator.clipboard.writeText(fullAddress);
-                        alert(`Copied: ${fullAddress}`);
-                      }}
-                      className="text-xs text-gray-400 font-mono mt-1 hover:text-purple-400 cursor-pointer flex items-center gap-1"
-                      title="Click to copy full address"
-                    >
-                      Wallet: {formatAddress(address || privyUser?.wallet?.address || '')}
-                      <span className="text-[10px]">📋</span>
-                    </button>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-xs text-gray-400 font-mono">
+                        {shortAddress || formatAddress(address || privyUser?.wallet?.address || '')}
+                      </span>
+                      <button
+                        onClick={handleCopyAddress}
+                        className="p-1 rounded hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
+                        title="Copy address"
+                      >
+                        {copied ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
+                      </button>
+                      <button
+                        onClick={() => window.open(explorerUrl, '_blank')}
+                        className="p-1 rounded hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
+                        title="View on explorer"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                      </button>
+                    </div>
                   )}
-                  <LevelProgress xp={150} size="sm" />
+                  <div className="mt-2">
+                    <LevelProgress xp={150} size="sm" />
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -213,7 +257,7 @@ export default function HomePage() {
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
               <span className="flex items-center gap-2">
-                🏆 Top Predictors Today
+                🏆 Top Predictors
               </span>
               <Link href="/leaderboard" className="text-sm text-purple-400 font-normal hover:text-purple-300">
                 View All →
@@ -221,20 +265,29 @@ export default function HomePage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {[
-              { rank: 1, name: '@whale', profit: '+15.2 ETH', icon: '🐋' },
-              { rank: 2, name: '@alice', profit: '+12.8 ETH', icon: '🌟' },
-              { rank: 3, name: '@crypto_king', profit: '+8.5 ETH', icon: '👑' },
-            ].map((user) => (
-              <div key={user.rank} className="flex items-center gap-3 py-2">
-                <span className="text-lg w-6 text-center">
-                  {user.rank === 1 ? '🥇' : user.rank === 2 ? '🥈' : '🥉'}
-                </span>
-                <span className="text-lg">{user.icon}</span>
-                <span className="flex-1 font-medium text-white">{user.name}</span>
-                <span className="text-green-400 font-medium">{user.profit}</span>
+            {topPredictors.length > 0 ? (
+              topPredictors.map((entry, index) => (
+                <div key={entry.address} className="flex items-center gap-3 py-2">
+                  <span className="text-lg w-6 text-center">
+                    {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'}
+                  </span>
+                  <span className="text-lg">
+                    {index === 0 ? '🐋' : index === 1 ? '🌟' : '👑'}
+                  </span>
+                  <span className="flex-1 font-medium text-white truncate">
+                    {entry.user?.username ? `@${entry.user.username}` : formatAddress(entry.address, 4)}
+                  </span>
+                  <span className="text-green-400 font-medium">
+                    {entry.totalVolume.toFixed(4)} ETH
+                  </span>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-4">
+                <p className="text-gray-400 text-sm">No predictors yet</p>
+                <p className="text-xs text-gray-500 mt-1">Be the first to place a bet!</p>
               </div>
-            ))}
+            )}
           </CardContent>
         </Card>
       </div>

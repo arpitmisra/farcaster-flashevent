@@ -1,36 +1,82 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useAccount } from 'wagmi';
+import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { LevelBadge } from '@/components/gamification/LevelProgress';
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { useFarcaster } from '@/app/providers';
-import { formatEth, cn } from '@/lib/utils';
+import { formatEth, formatAddress, cn } from '@/lib/utils';
 import { getLevelFromXP } from '@/types/index';
+import { fetchLeaderboard, fetchUserStats } from '@/lib/api/client';
 import { Trophy, TrendingUp, Flame, Users, ArrowUp, ArrowDown, Minus } from 'lucide-react';
 
 type LeaderboardType = 'profit' | 'winRate' | 'streak' | 'creator';
 type TimePeriod = 'all' | 'month' | 'week' | 'today';
 
-// Mock leaderboard data
-const MOCK_LEADERBOARD = [
-  { rank: 1, address: '0x1234...5678', username: 'whale', pfpUrl: null, profit: BigInt('125800000000000000000'), winRate: 78, wins: 234, bets: 300, streak: 15, level: 5, change: 'up' },
-  { rank: 2, address: '0x2345...6789', username: 'king', pfpUrl: null, profit: BigInt('98200000000000000000'), winRate: 74, wins: 185, bets: 250, streak: 12, level: 5, change: 'up' },
-  { rank: 3, address: '0x3456...7890', username: 'shark', pfpUrl: null, profit: BigInt('76500000000000000000'), winRate: 71, wins: 142, bets: 200, streak: 10, level: 4, change: 'down' },
-  { rank: 4, address: '0x4567...8901', username: 'alice', pfpUrl: null, profit: BigInt('65300000000000000000'), winRate: 68, wins: 136, bets: 200, streak: 9, level: 4, change: 'same' },
-  { rank: 5, address: '0x5678...9012', username: 'crypto_king', pfpUrl: null, profit: BigInt('58700000000000000000'), winRate: 72, wins: 144, bets: 200, streak: 11, level: 4, change: 'up' },
-];
+interface LeaderboardEntry {
+  rank: number;
+  address: string;
+  user?: {
+    username?: string;
+    displayName?: string;
+    avatar?: string;
+    fid?: number;
+  };
+  totalVolume: number;
+  totalBets: number;
+  winRate?: number;
+  wins?: number;
+  profit?: bigint;
+  streak?: number;
+  level?: number;
+  change?: 'up' | 'down' | 'same';
+}
 
-const MOCK_CREATOR_LEADERBOARD = [
-  { rank: 1, address: '0x1234...5678', username: 'whale', earnings: BigInt('45800000000000000000'), markets: 32, qualified: 31, avgPool: BigInt('15200000000000000000') },
-  { rank: 2, address: '0x2345...6789', username: 'market_master', earnings: BigInt('38300000000000000000'), markets: 28, qualified: 27, avgPool: BigInt('14800000000000000000') },
-  { rank: 3, address: '0x3456...7890', username: 'alice', earnings: BigInt('32100000000000000000'), markets: 25, qualified: 23, avgPool: BigInt('13900000000000000000') },
-];
+interface CreatorLeaderboardEntry {
+  rank: number;
+  address: string;
+  username?: string;
+  earnings: bigint;
+  markets: number;
+  qualified: number;
+  avgPool: bigint;
+}
 
 export default function LeaderboardPage() {
   const { shareToFarcaster } = useFarcaster();
+  const { address, isConnected } = useAccount();
   const [type, setType] = useState<LeaderboardType>('profit');
   const [period, setPeriod] = useState<TimePeriod>('all');
+
+  // Fetch leaderboard data from API
+  const { data: leaderboardData, isLoading: isLoadingLeaderboard } = useQuery({
+    queryKey: ['leaderboard', type, period],
+    queryFn: () => fetchLeaderboard({ type, period, limit: 50 }),
+    staleTime: 30000, // 30 seconds
+    refetchInterval: 60000, // Refresh every minute
+  });
+
+  // Fetch user's own stats for ranking
+  const { data: userStats, isLoading: isLoadingUserStats } = useQuery({
+    queryKey: ['userStats', address],
+    queryFn: () => address ? fetchUserStats(address) : null,
+    enabled: !!address,
+    staleTime: 30000,
+  });
+
+  // Transform API data to display format
+  const leaderboard: LeaderboardEntry[] = (leaderboardData as LeaderboardEntry[] || []).map((entry, index) => ({
+    ...entry,
+    rank: index + 1,
+    level: Math.min(5, Math.floor((entry.totalBets || 0) / 10) + 1),
+    change: 'same' as const,
+  }));
+
+  // Find user's rank in the leaderboard
+  const userRank = address ? leaderboard.findIndex(e => e.address?.toLowerCase() === address.toLowerCase()) + 1 : 0;
 
   const getRankBadge = (rank: number) => {
     if (rank === 1) return '🥇';
@@ -115,10 +161,23 @@ export default function LeaderboardPage() {
         </div>
 
         {/* Leaderboard */}
-        {type !== 'creator' ? (
+        {isLoadingLeaderboard ? (
+          <div className="flex justify-center py-12">
+            <LoadingSpinner size="lg" />
+          </div>
+        ) : leaderboard.length === 0 ? (
+          <Card>
+            <CardContent className="p-8 text-center">
+              <div className="text-4xl mb-4">🏆</div>
+              <h3 className="font-medium text-white mb-2">No rankings yet</h3>
+              <p className="text-gray-400 text-sm">Be the first to place a bet and climb the leaderboard!</p>
+            </CardContent>
+          </Card>
+        ) : type !== 'creator' ? (
           <div className="space-y-3">
-            {MOCK_LEADERBOARD.map((entry, index) => {
-              const levelInfo = getLevelInfo(entry.level);
+            {leaderboard.map((entry) => {
+              const levelInfo = getLevelInfo(entry.level || 1);
+              const displayName = entry.user?.username || entry.user?.displayName || formatAddress(entry.address, 4);
               
               return (
                 <Card key={entry.rank} className={cn(
@@ -137,17 +196,23 @@ export default function LeaderboardPage() {
                       
                       {/* Change indicator */}
                       <div className="w-4">
-                        {getChangeIcon(entry.change)}
+                        {getChangeIcon(entry.change || 'same')}
                       </div>
                       
                       {/* User info */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="text-lg">{levelInfo.icon}</span>
-                          <span className="font-medium text-white">@{entry.username}</span>
+                          {entry.user?.avatar ? (
+                            <img src={entry.user.avatar} alt="" className="w-6 h-6 rounded-full" />
+                          ) : (
+                            <span className="text-lg">{levelInfo.icon}</span>
+                          )}
+                          <span className="font-medium text-white truncate">
+                            {entry.user?.username ? `@${entry.user.username}` : displayName}
+                          </span>
                         </div>
                         <div className="text-xs text-gray-400">
-                          {entry.winRate}% win rate • {entry.wins}/{entry.bets} bets
+                          {entry.winRate ? `${entry.winRate}% win rate • ` : ''}{entry.totalBets} bets
                         </div>
                       </div>
                       
@@ -155,18 +220,18 @@ export default function LeaderboardPage() {
                       <div className="text-right">
                         {type === 'profit' && (
                           <div className="text-green-400 font-bold">
-                            +{formatEth(entry.profit)} ETH
+                            {entry.totalVolume.toFixed(4)} ETH
                           </div>
                         )}
                         {type === 'winRate' && (
                           <div className="text-blue-400 font-bold">
-                            {entry.winRate}%
+                            {entry.winRate || 0}%
                           </div>
                         )}
                         {type === 'streak' && (
                           <div className="text-orange-400 font-bold flex items-center gap-1">
                             <Flame className="w-4 h-4" />
-                            {entry.streak}
+                            {entry.streak || 0}
                           </div>
                         )}
                       </div>
@@ -178,82 +243,105 @@ export default function LeaderboardPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {MOCK_CREATOR_LEADERBOARD.map((entry) => (
-              <Card key={entry.rank} className={cn(
-                entry.rank <= 3 && 'border-purple-500/30'
-              )}>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    {/* Rank */}
-                    <div className="w-8 text-center">
-                      {entry.rank <= 3 ? (
-                        <span className="text-2xl">{getRankBadge(entry.rank)}</span>
-                      ) : (
-                        <span className="text-lg font-bold text-gray-400">{entry.rank}</span>
-                      )}
+            {leaderboard.map((entry) => {
+              const displayName = entry.user?.username || formatAddress(entry.address, 4);
+              
+              return (
+                <Card key={entry.rank} className={cn(
+                  entry.rank <= 3 && 'border-purple-500/30'
+                )}>
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3">
+                      {/* Rank */}
+                      <div className="w-8 text-center">
+                        {entry.rank <= 3 ? (
+                          <span className="text-2xl">{getRankBadge(entry.rank)}</span>
+                        ) : (
+                          <span className="text-lg font-bold text-gray-400">{entry.rank}</span>
+                        )}
+                      </div>
+                      
+                      {/* User info */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">🎨</span>
+                          <span className="font-medium text-white truncate">
+                            {entry.user?.username ? `@${entry.user.username}` : displayName}
+                          </span>
+                        </div>
+                        <div className="text-xs text-gray-400">
+                          {entry.totalBets} markets created
+                        </div>
+                      </div>
+                      
+                      {/* Volume */}
+                      <div className="text-right">
+                        <div className="text-purple-400 font-bold">
+                          {entry.totalVolume.toFixed(4)} ETH
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          volume
+                        </div>
+                      </div>
                     </div>
-                    
-                    {/* User info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-lg">🎨</span>
-                        <span className="font-medium text-white">@{entry.username}</span>
-                      </div>
-                      <div className="text-xs text-gray-400">
-                        {entry.qualified}/{entry.markets} qualified • Avg {formatEth(entry.avgPool)} ETH
-                      </div>
-                    </div>
-                    
-                    {/* Earnings */}
-                    <div className="text-right">
-                      <div className="text-purple-400 font-bold">
-                        +{formatEth(entry.earnings)} ETH
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        earned
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         )}
 
         {/* Your Ranking */}
-        <Card className="border-purple-500/30 bg-purple-500/5">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-8 text-center">
-                <span className="text-lg font-bold text-gray-400">127</span>
-              </div>
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">🥚</span>
-                  <span className="font-medium text-white">You</span>
-                  <span className="text-xs text-purple-400 px-2 py-0.5 rounded-full bg-purple-500/20">
-                    New
+        {isConnected && (
+          <Card className="border-purple-500/30 bg-purple-500/5">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-8 text-center">
+                  <span className="text-lg font-bold text-gray-400">
+                    {userRank > 0 ? userRank : '-'}
                   </span>
                 </div>
-                <div className="text-xs text-gray-400">
-                  Keep playing to climb the ranks!
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">
+                      {(userStats as { totalBets?: number })?.totalBets ? '🏅' : '🥚'}
+                    </span>
+                    <span className="font-medium text-white">You</span>
+                    {!(userStats as { totalBets?: number })?.totalBets && (
+                      <span className="text-xs text-purple-400 px-2 py-0.5 rounded-full bg-purple-500/20">
+                        New
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-gray-400">
+                    {(userStats as { totalBets?: number })?.totalBets 
+                      ? `${(userStats as { totalBets?: number }).totalBets} bets placed`
+                      : 'Place your first bet to join the ranks!'}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-gray-400 font-bold">
+                    {((userStats as { totalVolume?: number })?.totalVolume || 0).toFixed(4)} ETH
+                  </div>
                 </div>
               </div>
-              <div className="text-right">
-                <div className="text-gray-400 font-bold">0 ETH</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Share */}
         <Button 
           variant="outline" 
           fullWidth
-          onClick={() => shareToFarcaster(
-            `⚡ Check out the FlashEvent leaderboard!\n\n🥇 @whale leads with +125.8 ETH profit\n\nCan you make it to the top? 🏆`,
-            `${process.env.NEXT_PUBLIC_APP_URL}/leaderboard`
-          )}
+          onClick={() => {
+            const topPlayer = leaderboard[0];
+            const topName = topPlayer?.user?.username ? `@${topPlayer.user.username}` : formatAddress(topPlayer?.address || '', 4);
+            const topVolume = topPlayer?.totalVolume?.toFixed(2) || '0';
+            shareToFarcaster(
+              `⚡ Check out the FlashEvent leaderboard!\n\n🥇 ${topName} leads with ${topVolume} ETH volume\n\nCan you make it to the top? 🏆`,
+              `${process.env.NEXT_PUBLIC_APP_URL}/leaderboard`
+            );
+          }}
         >
           Share Leaderboard
         </Button>
