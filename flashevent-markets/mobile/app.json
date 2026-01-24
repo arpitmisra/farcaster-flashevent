@@ -1,0 +1,65 @@
+{
+  "expo": {
+    "name": "FlashEvent Markets",
+    "slug": "flashevent-markets",
+    "version": "1.0.0",
+    "platforms": ["ios", "android"],
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0A0A0F",
+    "splash": {
+      "backgroundColor": "#0A0A0F",
+      "resizeMode": "contain"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.flashevent.markets",
+      "buildNumber": "1",
+      "backgroundColor": "#0A0A0F",
+      "infoPlist": {
+        "LSApplicationQueriesSchemes": ["metamask"]
+      }
+    },
+    "android": {
+      "package": "com.flashevent.markets",
+      "versionCode": 1,
+      "backgroundColor": "#0A0A0F",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "data": [
+            {
+              "scheme": "flashevent",
+              "host": "*"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        },
+        {
+          "action": "VIEW",
+          "data": [
+            {
+              "scheme": "wc"
+            },
+            {
+              "scheme": "metamask"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
+    },
+    "scheme": "flashevent",
+    "plugins": [
+      "expo-secure-store"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "your-project-id"
+      }
+    }
+  }
+}

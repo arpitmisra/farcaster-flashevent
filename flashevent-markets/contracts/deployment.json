@@ -1,0 +1,24 @@
+{
+  "network": "monad-testnet",
+  "chainId": 10143,
+  "deployedAt": "2026-01-20T17:59:07.968Z",
+  "rpcUrl": "https://monad-testnet.g.alchemy.com/v2/f6Q2jX1N6pG4yztkh_TK5",
+  "blockExplorer": "https://testnet.monadexplorer.com",
+  "contracts": {
+    "MarketFactory": {
+      "address": "0x4a0F0d703e061c5F4fD0C8DDafDcBd2d45D36007",
+      "deploymentTx": "0x7540aa3b98416f957606a38264bf11408d8b99395f8c03248985ca6b52ccedf4"
+    }
+  },
+  "configuration": {
+    "treasury": "0xBb689Fd2A92b6EB905e56C3726Bf090fA2D3a6a4",
+    "owner": "0xBb689Fd2A92b6EB905e56C3726Bf090fA2D3a6a4",
+    "defaultProtocolFeeBps": 250,
+    "minLockDuration": 900
+  },
+  "features": {
+    "bettingDeadline": true,
+    "creatorFees": true,
+    "oneSidedMarketRefund": true
+  }
+}

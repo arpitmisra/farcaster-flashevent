@@ -1,0 +1,51 @@
+{
+  "name": "@flashevent/x402",
+  "version": "1.0.0",
+  "description": "x402 Micropayments Protocol for FlashEvent Markets - Instant payments via HTTP headers",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix"
+  },
+  "keywords": [
+    "x402",
+    "micropayments",
+    "ethereum",
+    "monad",
+    "http",
+    "payments",
+    "eip-712"
+  ],
+  "author": "FlashEvent",
+  "license": "MIT",
+  "dependencies": {
+    "ethers": "^6.11.0",
+    "axios": "^1.6.7"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "eslint": "^8.56.0"
+  },
+  "peerDependencies": {
+    "ethers": "^6.0.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": ["**/test/**/*.test.js"],
+    "collectCoverageFrom": ["src/**/*.js"],
+    "coverageThreshold": {
+      "global": {
+        "branches": 70,
+        "functions": 70,
+        "lines": 70,
+        "statements": 70
+      }
+    }
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

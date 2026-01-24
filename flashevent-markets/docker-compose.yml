@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  # MongoDB database
+  mongodb:
+    image: mongo:7
+    container_name: flashevent-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      - MONGO_INITDB_DATABASE=flashevent
+    networks:
+      - flashevent-network
+
+  # Redis cache
+  redis:
+    image: redis:7-alpine
+    container_name: flashevent-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - flashevent-network
+
+  # Backend API server
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: flashevent-backend
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+      - MONGODB_URI=mongodb://mongodb:27017/flashevent
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - mongodb
+      - redis
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    networks:
+      - flashevent-network
+
+  # Farcaster Frames server
+  frames:
+    build:
+      context: ./frames
+      dockerfile: Dockerfile
+    container_name: flashevent-frames
+    restart: unless-stopped
+    ports:
+      - "3002:3002"
+    environment:
+      - NODE_ENV=development
+      - PORT=3002
+      - API_URL=http://backend:3001/api
+    depends_on:
+      - backend
+    volumes:
+      - ./frames:/app
+      - /app/node_modules
+      - /app/.next
+    networks:
+      - flashevent-network
+
+volumes:
+  mongodb_data:
+  redis_data:
+
+networks:
+  flashevent-network:
+    driver: bridge

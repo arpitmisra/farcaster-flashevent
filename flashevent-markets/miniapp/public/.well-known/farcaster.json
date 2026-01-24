@@ -1,0 +1,36 @@
+{
+  "accountAssociation": {
+    "header": "YOUR_HEADER_HERE",
+    "payload": "YOUR_PAYLOAD_HERE",
+    "signature": "YOUR_SIGNATURE_HERE"
+  },
+  "miniapp": {
+    "version": "1",
+    "name": "FlashEvent Markets",
+    "iconUrl": "https://flashevent.vercel.app/icon.png",
+    "homeUrl": "https://flashevent.vercel.app",
+    "splashImageUrl": "https://flashevent.vercel.app/splash.png",
+    "splashBackgroundColor": "#030712",
+    "webhookUrl": "https://flashevent.vercel.app/api/webhook",
+    "subtitle": "Predict & Win on Farcaster",
+    "description": "Create prediction markets, place bets on real-world events, and earn rewards. Built on Monad blockchain.",
+    "screenshotUrls": [
+      "https://flashevent.vercel.app/screenshots/home.png",
+      "https://flashevent.vercel.app/screenshots/market.png",
+      "https://flashevent.vercel.app/screenshots/profile.png"
+    ],
+    "primaryCategory": "finance",
+    "tags": ["prediction", "betting", "crypto", "defi", "markets"],
+    "heroImageUrl": "https://flashevent.vercel.app/hero.png",
+    "tagline": "Predict. Bet. Win.",
+    "ogTitle": "FlashEvent Markets",
+    "ogDescription": "Decentralized prediction markets on Farcaster",
+    "ogImageUrl": "https://flashevent.vercel.app/og-image.png",
+    "requiredChains": ["eip155:10143"],
+    "requiredCapabilities": [
+      "wallet.getEthereumProvider",
+      "actions.composeCast",
+      "actions.openUrl"
+    ]
+  }
+}

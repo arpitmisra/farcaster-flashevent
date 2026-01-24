@@ -1,0 +1,52 @@
+{
+  "name": "flashevent-markets",
+  "version": "1.0.0",
+  "description": "FlashEvent Markets - Predict. Bet. Win. On Farcaster.",
+  "private": true,
+  "workspaces": [
+    "mobile",
+    "backend",
+    "frames",
+    "circuits",
+    "x402"
+  ],
+  "scripts": {
+    "mobile": "npm run start --workspace=mobile",
+    "mobile:ios": "npm run ios --workspace=mobile",
+    "mobile:android": "npm run android --workspace=mobile",
+    "backend:dev": "npm run dev --workspace=backend",
+    "backend:start": "npm run start --workspace=backend",
+    "frames:dev": "npm run dev --workspace=frames",
+    "frames:build": "npm run build --workspace=frames",
+    "circuits:compile": "npm run compile --workspace=circuits",
+    "install:all": "npm install && npm run install --workspaces",
+    "clean": "rm -rf node_modules && rm -rf */node_modules"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/flashevent/flashevent-markets.git"
+  },
+  "keywords": [
+    "prediction-market",
+    "farcaster",
+    "react-native",
+    "monad",
+    "blockchain",
+    "zk-proofs",
+    "x402"
+  ],
+  "author": "FlashEvent Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "buffer": "^6.0.3",
+    "crypto-browserify": "^3.12.1",
+    "ethers": "^6.16.0",
+    "readable-stream": "^4.7.0"
+  },
+  "devDependencies": {
+    "foundry-toolchain": "^0.0.1"
+  }
+}
