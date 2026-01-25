@@ -86,6 +86,16 @@ export function ConnectWallet() {
                   {isBalanceLoading ? '...' : `${balance?.native.formatted || '0'} ${balance?.native.symbol || 'MON'}`}
                 </span>
               </div>
+              {/* Chain indicator (Mini App) */}
+              {isCorrectChain ? (
+                <span className="ml-2 text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded">
+                  Monad
+                </span>
+              ) : (
+                <span className="ml-2 text-xs bg-red-500/20 text-red-400 px-2 py-0.5 rounded">
+                  Wrong chain
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-1">
               <button
@@ -111,6 +121,18 @@ export function ConnectWallet() {
               Disconnect
             </Button>
           </div>
+          {/* Allow switching even in Mini App (Farcaster embedded wallet) */}
+          {!isCorrectChain && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={switchToMonad}
+              isLoading={isSwitching}
+              className="text-xs"
+            >
+              🔄 Switch to {targetChainName}
+            </Button>
+          )}
         </div>
       );
     }
@@ -118,14 +140,17 @@ export function ConnectWallet() {
     return (
       <Button
         onClick={() => {
-          const connector = connectors[0];
+          // Prefer Farcaster connector explicitly
+          const connector =
+            connectors.find((c) => c.id?.toLowerCase().includes('farcaster') || c.name?.toLowerCase().includes('farcaster') || c.id?.toLowerCase().includes('miniapp')) ??
+            connectors[0];
           if (connector) {
             connect({ connector });
           }
         }}
         isLoading={isConnecting}
       >
-        Connect Wallet
+        Connect Farcaster Wallet
       </Button>
     );
   }

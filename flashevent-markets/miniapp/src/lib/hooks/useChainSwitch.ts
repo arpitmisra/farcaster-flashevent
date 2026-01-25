@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useChainId, useSwitchChain, useAccount } from 'wagmi';
+import sdk from '@farcaster/frame-sdk';
 import { monadTestnet } from '@/app/providers';
 
 // Monad Testnet chain ID
@@ -24,20 +25,51 @@ const MONAD_TESTNET_PARAMS = {
 // Check if we're in Farcaster Mini App environment
 const isInMiniAppEnvironment = () => {
   if (typeof window === 'undefined') return false;
-  return window.location.search.includes('miniApp=true') || window.parent !== window;
+  // Keep in sync with app/providers.tsx to avoid mis-detection.
+  const qs = window.location.search.toLowerCase();
+  const href = window.location.href.toLowerCase();
+  const ua = (typeof navigator !== 'undefined' ? navigator.userAgent : '').toLowerCase();
+
+  if (qs.includes('miniapp=true')) return true;
+
+  const looksLikeWarpcast = href.includes('warpcast') || ua.includes('warpcast') || ua.includes('farcaster');
+  let isIframed = false;
+  try {
+    isIframed = window.self !== window.top;
+  } catch {
+    isIframed = true;
+  }
+
+  return looksLikeWarpcast && isIframed;
 };
 
-// Direct function to add and switch chain via window.ethereum
-async function forceChainSwitch(): Promise<boolean> {
-  if (typeof window === 'undefined' || !window.ethereum) {
-    console.error('No ethereum provider found');
-    return false;
+type Eip1193Provider = {
+  request: (args: { method: string; params?: any[] }) => Promise<any>;
+};
+
+async function getActiveProvider(preferFarcaster: boolean): Promise<Eip1193Provider | null> {
+  if (typeof window === 'undefined') return null;
+
+  if (preferFarcaster) {
+    try {
+      const p = (await sdk.wallet.getEthereumProvider()) as unknown as Eip1193Provider | null;
+      if (p?.request) return p;
+    } catch (e) {
+      console.warn('Failed to get Farcaster ethereum provider:', e);
+    }
   }
+
+  const anyWin = window as any;
+  return anyWin?.ethereum?.request ? (anyWin.ethereum as Eip1193Provider) : null;
+}
+
+// Direct function to add and switch chain via an EIP-1193 provider
+async function forceChainSwitch(provider: Eip1193Provider): Promise<boolean> {
 
   try {
     // First, try to switch directly
     console.log('Attempting to switch to Monad Testnet...');
-    await window.ethereum.request({
+    await provider.request({
       method: 'wallet_switchEthereumChain',
       params: [{ chainId: MONAD_CHAIN_ID_HEX }],
     });
@@ -57,7 +89,7 @@ async function forceChainSwitch(): Promise<boolean> {
     ) {
       try {
         console.log('Chain not found, adding Monad Testnet...');
-        await window.ethereum.request({
+        await provider.request({
           method: 'wallet_addEthereumChain',
           params: [MONAD_TESTNET_PARAMS],
         });
@@ -68,7 +100,7 @@ async function forceChainSwitch(): Promise<boolean> {
         
         // Try switching again after adding
         try {
-          await window.ethereum.request({
+          await provider.request({
             method: 'wallet_switchEthereumChain',
             params: [{ chainId: MONAD_CHAIN_ID_HEX }],
           });
@@ -94,13 +126,11 @@ async function forceChainSwitch(): Promise<boolean> {
   }
 }
 
-// Get actual chain ID from MetaMask directly (not wagmi cache)
-async function getActualChainId(): Promise<number | null> {
-  if (typeof window === 'undefined' || !window.ethereum) {
-    return null;
-  }
+// Get actual chain ID from active provider (not wagmi cache)
+async function getActualChainId(provider: Eip1193Provider | null): Promise<number | null> {
+  if (!provider) return null;
   try {
-    const chainIdHex = await window.ethereum.request({ method: 'eth_chainId' });
+    const chainIdHex = await provider.request({ method: 'eth_chainId' });
     return parseInt(chainIdHex, 16);
   } catch (e) {
     console.error('Failed to get chain ID:', e);
@@ -120,9 +150,13 @@ export function useChainSwitch() {
   // Poll for actual chain ID from wallet
   useEffect(() => {
     let mounted = true;
+    let cachedProvider: Eip1193Provider | null = null;
     
     const checkChain = async () => {
-      const chainId = await getActualChainId();
+      if (!cachedProvider) {
+        cachedProvider = await getActiveProvider(isInMiniApp && isFarcasterConnector);
+      }
+      const chainId = await getActualChainId(cachedProvider);
       if (mounted && chainId !== null) {
         setActualChainId(chainId);
       }
@@ -135,7 +169,8 @@ export function useChainSwitch() {
     const interval = setInterval(checkChain, 2000);
 
     // Listen for chain changes
-    if (typeof window !== 'undefined' && window.ethereum?.on) {
+    const anyWin = typeof window !== 'undefined' ? (window as any) : null;
+    if (anyWin?.ethereum?.on) {
       const handleChainChanged = (chainIdHex: string) => {
         const newChainId = parseInt(chainIdHex, 16);
         console.log('Chain changed to:', newChainId);
@@ -143,12 +178,12 @@ export function useChainSwitch() {
           setActualChainId(newChainId);
         }
       };
-      window.ethereum.on('chainChanged', handleChainChanged);
+      anyWin.ethereum.on('chainChanged', handleChainChanged);
       
       return () => {
         mounted = false;
         clearInterval(interval);
-        window.ethereum?.removeListener?.('chainChanged', handleChainChanged);
+        anyWin?.ethereum?.removeListener?.('chainChanged', handleChainChanged);
       };
     }
 
@@ -166,7 +201,9 @@ export function useChainSwitch() {
   
   // Check if using Farcaster connector
   const isFarcasterConnector = useMemo(() => {
-    return connector?.id === 'farcaster' || connector?.name?.toLowerCase().includes('farcaster');
+    const id = (connector?.id || '').toLowerCase();
+    const name = (connector?.name || '').toLowerCase();
+    return id.includes('farcaster') || id.includes('miniapp') || name.includes('farcaster') || name.includes('miniapp');
   }, [connector]);
 
   const isInMiniApp = isInMiniAppEnvironment();
@@ -177,12 +214,6 @@ export function useChainSwitch() {
     
     if (isCorrectChain) {
       console.log('Already on correct chain');
-      return true;
-    }
-
-    // Skip for Farcaster in MiniApp - Warpcast handles chain
-    if (isInMiniApp && isFarcasterConnector) {
-      console.log('In Farcaster MiniApp, skipping chain switch');
       return true;
     }
 
@@ -206,7 +237,11 @@ export function useChainSwitch() {
 
       // Method 2: Direct window.ethereum call (more reliable for most wallets)
       console.log('Trying direct ethereum provider switch...');
-      const success = await forceChainSwitch();
+      const provider = await getActiveProvider(isInMiniApp && isFarcasterConnector);
+      if (!provider) {
+        throw new Error('No wallet provider found. Please connect your Farcaster wallet.');
+      }
+      const success = await forceChainSwitch(provider);
       setIsSwitching(false);
       return success;
       
