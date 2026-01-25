@@ -8,20 +8,8 @@
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "src/index.js"
-    },
-    {
-      "src": "/health",
-      "dest": "src/index.js"
-    },
-    {
       "src": "/(.*)",
       "dest": "src/index.js"
     }
-  ],
-  "env": {
-    "NODE_ENV": "production",
-    "IS_SERVERLESS": "true"
-  }
+  ]
 }
