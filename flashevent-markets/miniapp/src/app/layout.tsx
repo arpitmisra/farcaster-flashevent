@@ -6,6 +6,8 @@ import { Navbar } from '@/components/shared/Navbar';
 
 const inter = Inter({ subsets: ['latin'] });
 
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://farcaster-flashevent-xwwd.vercel.app';
+
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
@@ -13,6 +15,23 @@ export const viewport: Viewport = {
   userScalable: false,
   themeColor: '#030712',
 };
+
+const miniAppEmbed = {
+  version: '1',
+  // Mini App embeds require a 3:2 image
+  imageUrl: `${APP_URL}/api/embed-image`,
+  button: {
+    title: 'Open App',
+    action: {
+      // Per Farcaster spec, use launch_frame for Mini App embed actions
+      type: 'launch_frame',
+      name: 'FlashEvent Markets',
+      url: APP_URL,
+      splashImageUrl: `${APP_URL}/splash.png`,
+      splashBackgroundColor: '#000000',
+    },
+  },
+} as const;
 
 export const metadata: Metadata = {
   title: 'FlashEvent Markets - Predict & Win',
@@ -25,13 +44,13 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     locale: 'en_US',
-    url: process.env.NEXT_PUBLIC_APP_URL,
+    url: APP_URL,
     siteName: 'FlashEvent Markets',
     title: 'FlashEvent Markets - Predict & Win',
     description: 'Decentralized prediction markets on Farcaster',
     images: [
       {
-        url: `${process.env.NEXT_PUBLIC_APP_URL}/og-image.png`,
+        url: `${APP_URL}/ogImage.png`,
         width: 1200,
         height: 630,
         alt: 'FlashEvent Markets',
@@ -42,23 +61,13 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'FlashEvent Markets - Predict & Win',
     description: 'Decentralized prediction markets on Farcaster',
-    images: [`${process.env.NEXT_PUBLIC_APP_URL}/og-image.png`],
+    images: [`${APP_URL}/ogImage.png`],
   },
   other: {
-    'fc:frame': JSON.stringify({
-      version: '1',
-      imageUrl: `${process.env.NEXT_PUBLIC_APP_URL}/og-image.png`,
-      button: {
-        title: '⚡ Open App',
-        action: {
-          type: 'launch_miniapp',
-          url: process.env.NEXT_PUBLIC_APP_URL,
-          name: 'FlashEvent Markets',
-          splashImageUrl: `${process.env.NEXT_PUBLIC_APP_URL}/logo.png`,
-          splashBackgroundColor: '#030712',
-        },
-      },
-    }),
+    // Mini App embed meta tags (required for Warpcast to render "Open App" card in-feed)
+    'fc:miniapp': JSON.stringify(miniAppEmbed),
+    // Backward compatibility
+    'fc:frame': JSON.stringify(miniAppEmbed),
   },
 };
 
