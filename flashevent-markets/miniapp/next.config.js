@@ -1,4 +1,6 @@
 /** @type {import('next').NextConfig} */
+const path = require('path');
+
 const nextConfig = {
   reactStrictMode: true,
   // Disable ESLint during build (uses parent eslintrc which has missing plugins)
@@ -47,6 +49,17 @@ const nextConfig = {
   //     },
   //   ];
   // },
+  webpack: (config) => {
+    // Fix Vercel/Next build error from `@metamask/sdk` importing RN AsyncStorage.
+    // We alias it to a tiny web shim.
+    config.resolve = config.resolve || {};
+    config.resolve.alias = config.resolve.alias || {};
+    config.resolve.alias['@react-native-async-storage/async-storage'] = path.resolve(
+      __dirname,
+      'src/lib/shims/async-storage.ts'
+    );
+    return config;
+  },
 };
 
 module.exports = nextConfig;

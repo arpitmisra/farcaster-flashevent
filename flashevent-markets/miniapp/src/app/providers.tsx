@@ -184,6 +184,11 @@ function FarcasterProvider({ children }: { children: ReactNode }) {
       };
 
       try {
+        // Always attempt to dismiss the Farcaster splash screen.
+        // If we mis-detect the environment, the splash can get stuck forever.
+        safeReady('mount');
+        setTimeout(() => safeReady('mount+750ms'), 750);
+
         // Check if we're in a Farcaster Mini App environment
         const isMiniAppEnv = getIsMiniAppEnvironment();
         console.log('🔍 Environment check - isMiniApp:', isMiniAppEnv);
@@ -191,9 +196,6 @@ function FarcasterProvider({ children }: { children: ReactNode }) {
         if (isMiniAppEnv) {
           console.log('⚡ Initializing Farcaster Mini App SDK...');
           setIsInMiniApp(true);
-          // Call ready early so we never get stuck on the Farcaster splash screen,
-          // even if context loading hangs or throws.
-          safeReady('early');
           
           // Load Farcaster context (auto-authentication)
           const ctx = await withTimeout(sdk.context, 3500, 'sdk.context');
