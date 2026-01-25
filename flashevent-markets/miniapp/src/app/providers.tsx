@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode, useEffect, useState, createContext, useContext, useCallback, useMemo } from 'react';
+import { ReactNode, useEffect, useState, createContext, useContext, useCallback } from 'react';
 import sdk, { type Context } from '@farcaster/frame-sdk';
 import { PrivyProvider } from '@privy-io/react-auth';
 import { WagmiProvider, createConfig, http } from 'wagmi';
@@ -41,7 +41,6 @@ const getIsMiniAppEnvironment = (): boolean => {
 };
 
 // Create wagmi config based on environment
-// The Farcaster connector will be first in miniapp, injected first otherwise
 function createWagmiConfig(isMiniApp: boolean) {
   const connectors = isMiniApp
     ? [
@@ -67,7 +66,7 @@ function createWagmiConfig(isMiniApp: boolean) {
   });
 }
 
-// Initial config - will be replaced with proper one once we know the environment
+// Initial config
 let wagmiConfig = createConfig({
   chains: [monadTestnet],
   transports: {
@@ -84,7 +83,7 @@ let wagmiConfig = createConfig({
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 60 * 1000, // 1 minute
+      staleTime: 60 * 1000,
       refetchOnWindowFocus: false,
       retry: 2,
     },
@@ -146,9 +145,10 @@ function FarcasterProvider({ children }: { children: ReactNode }) {
       try {
         // Check if we're in a Farcaster Mini App environment
         const isMiniAppEnv = getIsMiniAppEnvironment();
+        console.log('🔍 Environment check - isMiniApp:', isMiniAppEnv);
 
         if (isMiniAppEnv) {
-          console.log('Detected Farcaster Mini App environment');
+          console.log('⚡ Initializing Farcaster Mini App SDK...');
           
           // Load Farcaster context (auto-authentication)
           const ctx = await sdk.context;
@@ -163,14 +163,14 @@ function FarcasterProvider({ children }: { children: ReactNode }) {
               displayName: ctx.user.displayName,
               pfpUrl: ctx.user.pfpUrl,
             });
-            console.log('Farcaster user loaded:', ctx.user.username);
+            console.log('👤 Farcaster user loaded:', ctx.user.username, 'FID:', ctx.user.fid);
           }
 
           // Try to get the ethereum provider and connected accounts
           try {
             const provider = await sdk.wallet.getEthereumProvider();
             if (provider) {
-              console.log('Farcaster Ethereum provider obtained');
+              console.log('💼 Farcaster Ethereum provider obtained');
               setIsWalletReady(true);
               
               // Try to get the connected account
@@ -178,29 +178,42 @@ function FarcasterProvider({ children }: { children: ReactNode }) {
                 const accounts = await provider.request({ method: 'eth_accounts' }) as string[];
                 if (accounts && accounts.length > 0) {
                   setConnectedAddress(accounts[0]);
-                  console.log('Farcaster wallet already connected:', accounts[0]);
+                  console.log('✅ Farcaster wallet connected:', accounts[0]);
                 }
               } catch (accountErr) {
-                console.log('No accounts connected yet, will connect on demand');
+                console.log('ℹ️ No accounts connected yet, will connect on demand');
               }
             }
           } catch (providerErr) {
-            console.error('Failed to get Farcaster wallet provider:', providerErr);
-            // Still proceed - user may need to connect
+            console.error('⚠️ Failed to get Farcaster wallet provider:', providerErr);
+            // Still proceed - user may need to connect manually
           }
 
-          // Signal ready to Farcaster client (hides splash screen)
+          // ⚡ CRITICAL: Signal ready to Farcaster client (hides splash screen)
+          console.log('🚀 Calling sdk.actions.ready()...');
           sdk.actions.ready();
-          console.log('Farcaster SDK ready, context:', ctx);
+          console.log('✅ SDK ready called - splash screen should hide now');
+          
         } else {
-          console.log('Not in Farcaster Mini App environment, using browser wallet');
+          console.log('🌐 Not in Farcaster Mini App - using browser mode');
           setIsWalletReady(true); // Browser wallets are always "ready"
         }
         
         setIsSDKLoaded(true);
+        console.log('✅ SDK loading complete');
+        
       } catch (error) {
-        console.error('Failed to load Farcaster SDK:', error);
-        setIsSDKLoaded(true); // Still proceed for development
+        console.error('❌ Failed to load Farcaster SDK:', error);
+        
+        // IMPORTANT: Still call ready even on error to prevent infinite loading
+        try {
+          sdk.actions.ready();
+          console.log('⚠️ Called ready() despite error to prevent stuck splash screen');
+        } catch (readyErr) {
+          console.error('❌ Even ready() failed:', readyErr);
+        }
+        
+        setIsSDKLoaded(true);
         setIsWalletReady(true);
       }
     };
@@ -219,7 +232,6 @@ function FarcasterProvider({ children }: { children: ReactNode }) {
 
   // Share to Farcaster (compose cast)
   const shareToFarcaster = useCallback(async (text: string, embedUrl?: string) => {
-    // Only include embed URL if it's a valid https URL (not localhost)
     const validEmbedUrl = embedUrl && embedUrl.startsWith('https://') ? embedUrl : undefined;
     
     if (isInMiniApp) {
@@ -230,7 +242,6 @@ function FarcasterProvider({ children }: { children: ReactNode }) {
         });
       } catch (err) {
         console.error('Failed to compose cast:', err);
-        // Fallback to web if SDK fails
         openWarpcastCompose(text, validEmbedUrl);
       }
     } else {
@@ -241,7 +252,6 @@ function FarcasterProvider({ children }: { children: ReactNode }) {
   // Helper to open Warpcast compose in browser
   const openWarpcastCompose = (text: string, embedUrl?: string) => {
     const encodedText = encodeURIComponent(text);
-    // Warpcast compose URL format
     let url = `https://warpcast.com/~/compose?text=${encodedText}`;
     if (embedUrl) {
       url += `&embeds[]=${encodeURIComponent(embedUrl)}`;
@@ -256,19 +266,10 @@ function FarcasterProvider({ children }: { children: ReactNode }) {
     }
   }, [isInMiniApp]);
 
-  // Loading state
+  // 🔥 CRITICAL FIX: Return null instead of custom loading screen
+  // This lets Farcaster's splash screen work properly
   if (!isSDKLoaded) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-950">
-        <div className="text-center space-y-4">
-          <div className="text-6xl animate-pulse">⚡</div>
-          <p className="text-white text-lg font-medium">Loading FlashEvent...</p>
-          <div className="w-48 h-1 bg-gray-800 rounded-full mx-auto overflow-hidden">
-            <div className="h-full bg-purple-500 rounded-full animate-pulse" style={{ width: '60%' }} />
-          </div>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   return (
