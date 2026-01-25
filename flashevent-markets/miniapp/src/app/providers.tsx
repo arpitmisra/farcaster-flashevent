@@ -1,13 +1,15 @@
 'use client';
 
 import { ReactNode, useEffect, useState, createContext, useContext, useCallback } from 'react';
-import sdk, { type Context } from '@farcaster/frame-sdk';
+import sdk from '@farcaster/frame-sdk';
 import { PrivyProvider } from '@privy-io/react-auth';
 import { WagmiProvider, createConfig, http } from 'wagmi';
 import { injected } from 'wagmi/connectors';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { farcasterMiniApp as miniAppConnector } from '@farcaster/miniapp-wagmi-connector';
 import { type Chain } from 'viem';
+
+type FrameSDKContext = Awaited<typeof sdk.context>;
 
 // Monad Testnet Configuration
 export const monadTestnet: Chain = {
@@ -35,9 +37,24 @@ export const monadTestnet: Chain = {
 // Check if we're in a Farcaster Mini App environment (client-side only)
 const getIsMiniAppEnvironment = (): boolean => {
   if (typeof window === 'undefined') return false;
-  return window.location.search.includes('miniApp=true') || 
-         window.parent !== window ||
-         window.location.href.includes('warpcast');
+  const qs = window.location.search.toLowerCase();
+  const href = window.location.href.toLowerCase();
+  const ua = (typeof navigator !== 'undefined' ? navigator.userAgent : '').toLowerCase();
+
+  // Explicit opt-in
+  if (qs.includes('miniapp=true')) return true;
+
+  // Heuristic: Warpcast/Farcaster user agent + running in an iframe
+  const looksLikeWarpcast = href.includes('warpcast') || ua.includes('warpcast') || ua.includes('farcaster');
+  let isIframed = false;
+  try {
+    isIframed = window.self !== window.top;
+  } catch {
+    // Cross-origin iframe can throw; treat as iframed.
+    isIframed = true;
+  }
+
+  return looksLikeWarpcast && isIframed;
 };
 
 // Create wagmi config based on environment
@@ -101,7 +118,7 @@ interface FarcasterUser {
 }
 
 interface FarcasterContextType {
-  context: Context | null;
+  context: FrameSDKContext | null;
   user: FarcasterUser | null;
   isSDKLoaded: boolean;
   isInMiniApp: boolean;
@@ -134,7 +151,7 @@ export const useFarcaster = () => {
 
 function FarcasterProvider({ children }: { children: ReactNode }) {
   const [isSDKLoaded, setIsSDKLoaded] = useState(false);
-  const [context, setContext] = useState<Context | null>(null);
+  const [context, setContext] = useState<FrameSDKContext | null>(null);
   const [user, setUser] = useState<FarcasterUser | null>(null);
   const [isInMiniApp, setIsInMiniApp] = useState(false);
   const [isWalletReady, setIsWalletReady] = useState(false);
@@ -142,6 +159,30 @@ function FarcasterProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const load = async () => {
+      const safeReady = (reason: string) => {
+        try {
+          console.log(`🚀 Calling sdk.actions.ready() (${reason})...`);
+          sdk.actions.ready();
+          console.log('✅ sdk.actions.ready() called');
+        } catch (err) {
+          console.warn('⚠️ sdk.actions.ready() failed:', err);
+        }
+      };
+
+      const withTimeout = async <T,>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
+        let timeout: ReturnType<typeof setTimeout> | null = null;
+        try {
+          return await Promise.race([
+            promise,
+            new Promise<T>((_, reject) => {
+              timeout = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+            }),
+          ]);
+        } finally {
+          if (timeout) clearTimeout(timeout);
+        }
+      };
+
       try {
         // Check if we're in a Farcaster Mini App environment
         const isMiniAppEnv = getIsMiniAppEnvironment();
@@ -149,11 +190,14 @@ function FarcasterProvider({ children }: { children: ReactNode }) {
 
         if (isMiniAppEnv) {
           console.log('⚡ Initializing Farcaster Mini App SDK...');
+          setIsInMiniApp(true);
+          // Call ready early so we never get stuck on the Farcaster splash screen,
+          // even if context loading hangs or throws.
+          safeReady('early');
           
           // Load Farcaster context (auto-authentication)
-          const ctx = await sdk.context;
+          const ctx = await withTimeout(sdk.context, 3500, 'sdk.context');
           setContext(ctx);
-          setIsInMiniApp(true);
 
           // Extract user info from context
           if (ctx?.user) {
@@ -168,7 +212,7 @@ function FarcasterProvider({ children }: { children: ReactNode }) {
 
           // Try to get the ethereum provider and connected accounts
           try {
-            const provider = await sdk.wallet.getEthereumProvider();
+            const provider = await withTimeout(sdk.wallet.getEthereumProvider(), 3500, 'sdk.wallet.getEthereumProvider()');
             if (provider) {
               console.log('💼 Farcaster Ethereum provider obtained');
               setIsWalletReady(true);
@@ -189,13 +233,12 @@ function FarcasterProvider({ children }: { children: ReactNode }) {
             // Still proceed - user may need to connect manually
           }
 
-          // ⚡ CRITICAL: Signal ready to Farcaster client (hides splash screen)
-          console.log('🚀 Calling sdk.actions.ready()...');
-          sdk.actions.ready();
-          console.log('✅ SDK ready called - splash screen should hide now');
+          // Signal ready again after initialization completes
+          safeReady('after-init');
           
         } else {
           console.log('🌐 Not in Farcaster Mini App - using browser mode');
+          setIsInMiniApp(false);
           setIsWalletReady(true); // Browser wallets are always "ready"
         }
         
@@ -205,16 +248,12 @@ function FarcasterProvider({ children }: { children: ReactNode }) {
       } catch (error) {
         console.error('❌ Failed to load Farcaster SDK:', error);
         
-        // IMPORTANT: Still call ready even on error to prevent infinite loading
-        try {
-          sdk.actions.ready();
-          console.log('⚠️ Called ready() despite error to prevent stuck splash screen');
-        } catch (readyErr) {
-          console.error('❌ Even ready() failed:', readyErr);
-        }
+        // IMPORTANT: still call ready even on error to prevent infinite loading
+        safeReady('error-fallback');
         
         setIsSDKLoaded(true);
         setIsWalletReady(true);
+        setIsInMiniApp(false);
       }
     };
 
@@ -266,12 +305,6 @@ function FarcasterProvider({ children }: { children: ReactNode }) {
     }
   }, [isInMiniApp]);
 
-  // 🔥 CRITICAL FIX: Return null instead of custom loading screen
-  // This lets Farcaster's splash screen work properly
-  if (!isSDKLoaded) {
-    return null;
-  }
-
   return (
     <FarcasterContext.Provider value={{ 
       context, 
@@ -284,19 +317,44 @@ function FarcasterProvider({ children }: { children: ReactNode }) {
       shareToFarcaster,
       addMiniApp,
     }}>
-      {children}
+      {!isSDKLoaded ? (
+        <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
+          <div className="text-center space-y-2">
+            <div className="text-3xl">⚡</div>
+            <div className="text-sm text-gray-300">Loading FlashEvents…</div>
+            <div className="text-xs text-gray-500">If this gets stuck, open DevTools and check console logs.</div>
+          </div>
+        </div>
+      ) : (
+        children
+      )}
     </FarcasterContext.Provider>
   );
 }
 
 // Main Providers Component
 export function Providers({ children }: { children: ReactNode }) {
+  const privyAppId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
+  if (!privyAppId) {
+    return (
+      <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center p-6">
+        <div className="max-w-md w-full space-y-3">
+          <div className="text-xl font-semibold">Missing env: `NEXT_PUBLIC_PRIVY_APP_ID`</div>
+          <div className="text-sm text-gray-300">
+            Add it in `miniapp/.env.local` (for local) and Vercel Environment Variables (for prod),
+            then redeploy/restart.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <FarcasterProvider>
       <WagmiProvider config={wagmiConfig}>
         <QueryClientProvider client={queryClient}>
           <PrivyProvider
-            appId={process.env.NEXT_PUBLIC_PRIVY_APP_ID!}
+            appId={privyAppId}
             config={{
               loginMethods: ['wallet', 'email', 'google', 'twitter', 'farcaster'],
               appearance: {
