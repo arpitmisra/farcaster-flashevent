@@ -3,11 +3,11 @@
 import { ReactNode, useEffect, useState, createContext, useContext, useCallback } from 'react';
 import sdk from '@farcaster/frame-sdk';
 import { PrivyProvider } from '@privy-io/react-auth';
-import { WagmiProvider, createConfig, http } from 'wagmi';
-import { injected } from 'wagmi/connectors';
+import { WagmiProvider, createConfig, useSetActiveWallet } from '@privy-io/wagmi';
+import { http } from 'wagmi';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { farcasterMiniApp as miniAppConnector } from '@farcaster/miniapp-wagmi-connector';
 import { type Chain } from 'viem';
+import { usePrivy, useWallets } from '@privy-io/react-auth';
 
 type FrameSDKContext = Awaited<typeof sdk.context>;
 
@@ -57,43 +57,12 @@ const getIsMiniAppEnvironment = (): boolean => {
   return looksLikeWarpcast && isIframed;
 };
 
-// Create wagmi config based on environment
-function createWagmiConfig(isMiniApp: boolean) {
-  const connectors = isMiniApp
-    ? [
-        // In Mini App: Farcaster connector first (primary)
-        miniAppConnector(),
-        // Fallback to injected
-        injected({ shimDisconnect: true }),
-      ]
-    : [
-        // In browser: Injected (MetaMask) first
-        injected({ shimDisconnect: true }),
-        // Farcaster as fallback
-        miniAppConnector(),
-      ];
-
-  return createConfig({
-    chains: [monadTestnet],
-    transports: {
-      [monadTestnet.id]: http(),
-    },
-    connectors,
-    ssr: true,
-  });
-}
-
-// Initial config
-let wagmiConfig = createConfig({
+// Wagmi config (Privy drives connector state)
+const wagmiConfig = createConfig({
   chains: [monadTestnet],
   transports: {
     [monadTestnet.id]: http(),
   },
-  connectors: [
-    miniAppConnector(),
-    injected({ shimDisconnect: true }),
-  ],
-  ssr: true,
 });
 
 // React Query Client
@@ -334,6 +303,26 @@ function FarcasterProvider({ children }: { children: ReactNode }) {
   );
 }
 
+function PrivyWagmiSync({ children }: { children: ReactNode }) {
+  const { authenticated } = usePrivy();
+  const { wallets } = useWallets();
+  const { setActiveWallet } = useSetActiveWallet();
+
+  useEffect(() => {
+    if (!authenticated) return;
+    if (!wallets || wallets.length === 0) return;
+
+    // Prefer Privy embedded wallet when available; otherwise just pick first.
+    const preferred =
+      wallets.find((w: any) => w.walletClientType === 'privy' || w.connectorType === 'embedded' || w.type === 'embedded') ??
+      wallets[0];
+
+    setActiveWallet(preferred).catch((e: any) => console.warn('Failed to set active Privy wallet:', e));
+  }, [authenticated, wallets, setActiveWallet]);
+
+  return <>{children}</>;
+}
+
 // Main Providers Component
 export function Providers({ children }: { children: ReactNode }) {
   const privyAppId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
@@ -353,37 +342,37 @@ export function Providers({ children }: { children: ReactNode }) {
 
   return (
     <FarcasterProvider>
-      <WagmiProvider config={wagmiConfig}>
+      <PrivyProvider
+        appId={privyAppId}
+        config={{
+          loginMethods: ['wallet', 'email', 'google', 'twitter', 'farcaster'],
+          appearance: {
+            theme: 'dark',
+            accentColor: '#8B5CF6',
+            logo: `${process.env.NEXT_PUBLIC_APP_URL || ''}/logo.png`,
+            landingHeader: '⚡ FlashEvent Markets',
+            showWalletLoginFirst: true,
+          },
+          embeddedWallets: {
+            createOnLogin: 'all-users',
+            requireUserPasswordOnCreate: false,
+            noPromptOnSignature: true,
+          },
+          externalWallets: {
+            coinbaseWallet: {
+              connectionOptions: 'smartWalletOnly',
+            },
+          },
+          supportedChains: [monadTestnet],
+          defaultChain: monadTestnet,
+        }}
+      >
         <QueryClientProvider client={queryClient}>
-          <PrivyProvider
-            appId={privyAppId}
-            config={{
-              loginMethods: ['wallet', 'email', 'google', 'twitter', 'farcaster'],
-              appearance: {
-                theme: 'dark',
-                accentColor: '#8B5CF6',
-                logo: `${process.env.NEXT_PUBLIC_APP_URL || ''}/logo.png`,
-                landingHeader: '⚡ FlashEvent Markets',
-                showWalletLoginFirst: true,
-              },
-              embeddedWallets: {
-                createOnLogin: 'all-users',
-                requireUserPasswordOnCreate: false,
-                noPromptOnSignature: true,
-              },
-              externalWallets: {
-                coinbaseWallet: {
-                  connectionOptions: 'smartWalletOnly',
-                },
-              },
-              supportedChains: [monadTestnet],
-              defaultChain: monadTestnet,
-            }}
-          >
-            {children}
-          </PrivyProvider>
+          <WagmiProvider config={wagmiConfig}>
+            <PrivyWagmiSync>{children}</PrivyWagmiSync>
+          </WagmiProvider>
         </QueryClientProvider>
-      </WagmiProvider>
+      </PrivyProvider>
     </FarcasterProvider>
   );
 }

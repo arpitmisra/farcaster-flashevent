@@ -209,68 +209,30 @@ export default function CreateMarketPage() {
     }
   };
 
-  // Direct check of actual chain from MetaMask
-  const checkActualChain = async (): Promise<boolean> => {
-    if (typeof window === 'undefined' || !window.ethereum) {
-      return false;
-    }
-    try {
-      const chainIdHex = await window.ethereum.request({ method: 'eth_chainId' });
-      const actualChainId = parseInt(chainIdHex, 16);
-      console.log('Actual chain ID from wallet:', actualChainId, 'Expected:', 10143);
-      return actualChainId === 10143;
-    } catch (e) {
-      console.error('Failed to check chain:', e);
-      return false;
-    }
-  };
-
   // Handle chain switch separately
   const handleSwitchChain = async () => {
     console.log('Manual chain switch triggered');
     const success = await switchToMonad();
-    if (success) {
-      // Wait for state to update
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      // Verify the switch worked
-      const onCorrectChain = await checkActualChain();
-      if (!onCorrectChain) {
-        alert('Chain switch may have failed. Please manually switch to Monad Testnet in your wallet.');
-      }
-      // Force page refresh to update all state
-      window.location.reload();
-    }
+    if (!success) return;
+    // Let state settle; do not hard-reload (breaks embedded wallets).
+    await new Promise(resolve => setTimeout(resolve, 800));
   };
 
   const handleContinue = async () => {
     if (!preview) return;
-    
-    // ALWAYS check actual chain from wallet, not wagmi state
-    const actuallyOnCorrectChain = await checkActualChain();
-    
-    if (!actuallyOnCorrectChain) {
-      console.log('Wrong chain detected (actual check), forcing switch...');
-      
-      // Force the switch
+
+    // Use the chain state from `useChainSwitch` (supports Farcaster provider + Privy embedded wallets).
+    if (!isCorrectChain) {
+      console.log('Wrong chain detected, requesting switch...');
       const switched = await switchToMonad();
-      if (!switched) {
-        alert('Please switch to Monad Testnet to create a market.\n\nClick the "Switch to Monad Testnet" button or manually switch in your wallet.');
-        return;
-      }
-      
-      // Wait for chain switch to complete
-      await new Promise(resolve => setTimeout(resolve, 2500));
-      
-      // Verify switch worked
-      const verifyChain = await checkActualChain();
-      if (!verifyChain) {
-        alert('Still on wrong network. Please manually switch to Monad Testnet (Chain ID: 10143) in your wallet and try again.');
-        window.location.reload();
-        return;
-      }
+      if (!switched) return;
+      // Give time for state to update
+      await new Promise(resolve => setTimeout(resolve, 800));
+      // Re-check via provider-backed chainId (not MetaMask-only).
+      if ((chainId ?? null) !== 10143) return;
     }
-    
-    console.log('Chain verified, proceeding with market creation...');
+
+    console.log('Chain verified (hook), proceeding with market creation...');
     
     // Calculate duration in seconds
     const durationLabel = formData.duration;
