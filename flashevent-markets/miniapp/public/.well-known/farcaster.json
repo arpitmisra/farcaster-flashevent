@@ -1,36 +1,38 @@
 {
-  "accountAssociation": {
-    "header": "YOUR_HEADER_HERE",
-    "payload": "YOUR_PAYLOAD_HERE",
-    "signature": "YOUR_SIGNATURE_HERE"
-  },
-  "miniapp": {
+  "frame": {
+    "name": "FlashEvents Market",
     "version": "1",
-    "name": "FlashEvent Markets",
-    "iconUrl": "https://farcaster-flashevent-xwwd.vercel.app/logo.jpeg",
+    "iconUrl": "https://farcaster-flashevent-xwwd.vercel.app/logo.png",
     "homeUrl": "https://farcaster-flashevent-xwwd.vercel.app",
-    "splashImageUrl": "https://farcaster-flashevent-xwwd.vercel.app/logo.jpeg",
-    "splashBackgroundColor": "#030712",
+    "imageUrl": "https://farcaster-flashevent-xwwd.vercel.app/market.png",
+    "buttonTitle": "Open FlashEvents Market",
+    "splashImageUrl": "https://farcaster-flashevent-xwwd.vercel.app/splash.png",
+    "splashBackgroundColor": "#000000",
     "webhookUrl": "https://farcaster-flashevent-xwwd.vercel.app/api/webhook",
     "subtitle": "Social Platform For Bets On Farcaster",
-    "description": "The social prediction market for Farcaster. Create markets on anything, bet with friends, and earn rewards — all powered by Monad blockchain.",
+    "description": "The social prediction market for Farcaster. Create markets on anything, bet with friends, and earn rewards all powered by Monad blockchain.",
+    "primaryCategory": "social",
     "screenshotUrls": [
-      "https://farcaster-flashevent-xwwd.vercel.app/home.jpeg",
-      "https://farcaster-flashevent-xwwd.vercel.app/market.jpeg",
-      "https://farcaster-flashevent-xwwd.vercel.app/profile.jpeg"
+      "https://farcaster-flashevent-xwwd.vercel.app/market.png",
+      "https://farcaster-flashevent-xwwd.vercel.app/profile.png",
+      "https://farcaster-flashevent-xwwd.vercel.app/home.png"
     ],
-    "primaryCategory": "finance",
-    "tags": ["prediction", "betting", "crypto", "defi", "markets"],
-    "heroImageUrl": "https://farcaster-flashevent-xwwd.vercel.app/home.jpeg",
+    "heroImageUrl": "https://farcaster-flashevent-xwwd.vercel.app/home.png",
+    "tags": [
+      "social",
+      "viral",
+      "prediction",
+      "market"
+    ],
     "tagline": "Predict. Bet. Win.",
-    "ogTitle": "FlashEvent Markets",
+    "ogTitle": "Social Prediction Market",
     "ogDescription": "Decentralized prediction markets on Farcaster",
-    "ogImageUrl": "https://farcaster-flashevent-xwwd.vercel.app/home.jpeg",
-    "requiredChains": ["eip155:10143"],
-    "requiredCapabilities": [
-      "wallet.getEthereumProvider",
-      "actions.composeCast",
-      "actions.openUrl"
-    ]
+    "ogImageUrl": "https://farcaster-flashevent-xwwd.vercel.app/ogImage.png",
+    "castShareUrl": "https://warpcast.com/~/compose?text=Check%20out%20FlashEvent%20Markets%20-%20predict%20%26%20win%20on%20Farcaster!&embeds[]=https://farcaster-flashevent-xwwd.vercel.app"
+  },
+  "accountAssociation": {
+    "header": "eyJmaWQiOjIyMTcwMjQsInR5cGUiOiJhdXRoIiwia2V5IjoiMHg4REI0NmUwRTk4MWM2NjQ5ODgxYzgyNDg5MzZhNzE0NjFhRDMzNjY4In0",
+    "payload": "eyJkb21haW4iOiJmYXJjYXN0ZXItZmxhc2hldmVudC14d3dkLnZlcmNlbC5hcHAifQ",
+    "signature": "GAhC0ezclAeIHCi2cbs4Xp8eB0/BQ9lVS29crD608d8G+z3AVdybptxDWg17hyFezh4OkYiCEraNLn3YNLcNrBs="
   }
 }
