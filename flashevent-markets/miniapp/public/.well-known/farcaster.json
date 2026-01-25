@@ -1,39 +1,39 @@
 {
-  "frame": {
-    "name": "FlashEvent-Markets",
-    "version": "1",
-    "iconUrl": "https://farcaster-flashevent-xwwd.vercel.app/public/icon.png",
-    "homeUrl": "https://farcaster-flashevent-xwwd.vercel.app",
-    "imageUrl": "https://farcaster-flashevent-xwwd.vercel.app/image.png",
-    "buttonTitle": "Open FlashEvent Markets",
-    "splashImageUrl": "https://farcaster-flashevent-xwwd.vercel.app/splash.png",
-    "splashBackgroundColor": "#000000",
-    "webhookUrl": "https://farcaster-flashevent-xwwd.vercel.app/api/webhook",
-    "subtitle": "Social bets on farcaster",
-    "description": "Social bets on farcaster",
-    "primaryCategory": "social",
-    "screenshotUrls": [
-      "https://farcaster-flashevent-xwwd.vercel.app/market.png",
-      "https://farcaster-flashevent-xwwd.vercel.app/profile.png",
-      "https://farcaster-flashevent-xwwd.vercel.app/home.png"
-    ],
-    "heroImageUrl": "https://farcaster-flashevent-xwwd.vercel.app/home.png",
-    "tags": [
-      "social",
-      "betting",
-      "prediction-markets",
-      "viral",
-      "consumer"
-    ],
-    "tagline": "Predict. Bet. Grow.",
-    "ogTitle": "FlashEvent-Place bets",
-    "ogDescription": "Place bets quickly, earn rewards",
-    "ogImageUrl": "https://farcaster-flashevent-xwwd.vercel.app/home.png",
-    "castShareUrl": " https://farcaster-flashevent-xwwd.vercel.app"
-  },
-  "accountAssociation": {
-    "header": "eyJmaWQiOjIyMTcwMjQsInR5cGUiOiJhdXRoIiwia2V5IjoiMHg4REI0NmUwRTk4MWM2NjQ5ODgxYzgyNDg5MzZhNzE0NjFhRDMzNjY4In0",
-    "payload": "eyJkb21haW4iOiJmYXJjYXN0ZXItZmxhc2hldmVudC14d3dkLnZlcmNlbC5hcHAifQ",
-    "signature": "GAhC0ezclAeIHCi2cbs4Xp8eB0/BQ9lVS29crD608d8G+z3AVdybptxDWg17hyFezh4OkYiCEraNLn3YNLcNrBs="
+    "frame": {
+      "name": "FlashEvent-Markets",
+      "version": "1",
+      "iconUrl": "https://farcaster-flashevent-xwwd.vercel.app/public/icon.png",
+      "homeUrl": "https://farcaster-flashevent-xwwd.vercel.app",
+      "imageUrl": "https://farcaster-flashevent-xwwd.vercel.app/image.png",
+      "buttonTitle": "Open FlashEvent Markets",
+      "splashImageUrl": "https://farcaster-flashevent-xwwd.vercel.app/splash.png",
+      "splashBackgroundColor": "#000000",
+      "webhookUrl": "https://farcaster-flashevent-xwwd.vercel.app/api/webhook",
+      "subtitle": "Social bets on farcaster",
+      "description": "Social bets on farcaster",
+      "primaryCategory": "social",
+      "screenshotUrls": [
+        "https://farcaster-flashevent-xwwd.vercel.app/market.png",
+        "https://farcaster-flashevent-xwwd.vercel.app/profile.png",
+        "https://farcaster-flashevent-xwwd.vercel.app/home.png"
+      ],
+      "heroImageUrl": "https://farcaster-flashevent-xwwd.vercel.app/home.png",
+      "tags": [
+        "social",
+        "betting",
+        "prediction-markets",
+        "viral",
+        "consumer"
+      ],
+      "tagline": "Predict. Bet. Grow.",
+      "ogTitle": "FlashEvent-Place bets",
+      "ogDescription": "Place bets quickly, earn rewards",
+      "ogImageUrl": "https://farcaster-flashevent-xwwd.vercel.app/home.png",
+      "castShareUrl": "https://farcaster-flashevent-xwwd.vercel.app/share"
+    },
+    "accountAssociation": {
+      "header": "eyJmaWQiOjIyMTcwMjQsInR5cGUiOiJhdXRoIiwia2V5IjoiMHg4REI0NmUwRTk4MWM2NjQ5ODgxYzgyNDg5MzZhNzE0NjFhRDMzNjY4In0",
+      "payload": "eyJkb21haW4iOiJmYXJjYXN0ZXItZmxhc2hldmVudC14d3dkLnZlcmNlbC5hcHAifQ",
+      "signature": "GAhC0ezclAeIHCi2cbs4Xp8eB0/BQ9lVS29crD608d8G+z3AVdybptxDWg17hyFezh4OkYiCEraNLn3YNLcNrBs="
+    }
   }
-}
