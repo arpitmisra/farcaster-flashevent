@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAccount } from 'wagmi';
+import { useAccount, useConnect } from 'wagmi';
 import { usePrivy } from '@privy-io/react-auth';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -98,63 +98,42 @@ const BET_TYPES = [
 export default function CreateMarketPage() {
   const router = useRouter();
   const { address, isConnected } = useAccount();
+  const { connect, connectors, isPending: isConnecting } = useConnect();
   const { authenticated, user: privyUser } = usePrivy();
+  const { isInMiniApp } = useFarcaster();
   const { isCorrectChain: wagmiIsCorrectChain, isSwitching, switchToMonad, targetChainName, chainId } = useChainSwitch();
   
   // Local state for actual chain verification
   const [actualChainId, setActualChainId] = useState<number | null>(null);
   
-  // Poll for actual chain ID directly from wallet
+  // Keep the UI's "actual chain id" in sync with the chain switch hook.
+  // (The hook already reads from the active provider, including Farcaster embedded wallet.)
   useEffect(() => {
-    if (!isConnected) {
-      setActualChainId(null);
-      return;
-    }
-
-    const checkChain = async () => {
-      if (typeof window !== 'undefined' && window.ethereum) {
-        try {
-          const chainIdHex = await window.ethereum.request({ method: 'eth_chainId' });
-          const id = parseInt(chainIdHex, 16);
-          setActualChainId(id);
-        } catch (e) {
-          console.error('Failed to get chain:', e);
-        }
-      }
-    };
-
-    // Check immediately
-    checkChain();
-    
-    // Poll every second
-    const interval = setInterval(checkChain, 1000);
-    
-    // Listen for chain changes
-    const handleChainChanged = () => {
-      checkChain();
-    };
-    
-    if (typeof window !== 'undefined' && window.ethereum?.on) {
-      window.ethereum.on('chainChanged', handleChainChanged);
-    }
-
-    return () => {
-      clearInterval(interval);
-      if (typeof window !== 'undefined' && window.ethereum?.removeListener) {
-        window.ethereum.removeListener('chainChanged', handleChainChanged);
-      }
-    };
-  }, [isConnected]);
+    setActualChainId(chainId ?? null);
+  }, [chainId]);
 
   // Use ACTUAL chain check, not wagmi cache
-  const isCorrectChain = actualChainId === 10143;
+  const isCorrectChain = wagmiIsCorrectChain;
   
   // For UI purposes: user is logged in via either method
   const isUserLoggedIn = isConnected || authenticated;
   
-  // For transactions: MUST have wagmi connected (MetaMask directly) AND on correct chain
+  // For transactions: MUST have wagmi connected (Farcaster embedded wallet in Mini App)
   const canTransact = isConnected && !!address;
   const canCreateMarket = canTransact && isCorrectChain;
+
+  // In Mini App: connect Farcaster embedded wallet via wagmi connector
+  const handleConnectFarcasterWallet = () => {
+    const fc =
+      connectors.find(
+        (c) =>
+          c.id?.toLowerCase().includes('farcaster') ||
+          c.id?.toLowerCase().includes('miniapp') ||
+          c.name?.toLowerCase().includes('farcaster') ||
+          c.name?.toLowerCase().includes('miniapp')
+      ) ?? connectors[0];
+    if (fc) connect({ connector: fc });
+  };
   
   const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
   const [formData, setFormData] = useState<any>({});
@@ -678,12 +657,30 @@ export default function CreateMarketPage() {
                 {/* Step 1: Not connected */}
                 {!canTransact && (
                   <div className="space-y-3">
-                    <Button fullWidth size="lg" disabled>
-                      Connect Wallet First
-                    </Button>
-                    <p className="text-center text-sm text-yellow-500">
-                      ⚠️ Connect MetaMask to create a market (click Connect in header)
-                    </p>
+                    {isInMiniApp ? (
+                      <>
+                        <Button
+                          fullWidth
+                          size="lg"
+                          onClick={handleConnectFarcasterWallet}
+                          isLoading={isConnecting}
+                        >
+                          Connect Farcaster Wallet
+                        </Button>
+                        <p className="text-center text-sm text-yellow-500">
+                          ⚠️ Logged in ≠ wallet connected. Connect the embedded wallet to sign transactions.
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <Button fullWidth size="lg" disabled>
+                          Connect Wallet First
+                        </Button>
+                        <p className="text-center text-sm text-yellow-500">
+                          ⚠️ Connect MetaMask to create a market (click Connect in header)
+                        </p>
+                      </>
+                    )}
                   </div>
                 )}
                 
